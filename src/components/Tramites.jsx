@@ -1,10 +1,3 @@
-/**
- * Gestión de Trámites — integración con GET/POST/PUT/DELETE /api/tramites
- * Tabla: tramites (+ workspace_id, folio en migración 2026_04_15_121000)
- *
- * Copia a tu src (ajusta imports: ./Sidebar o ../components/Sidebar).
- */
-
 import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -71,7 +64,7 @@ const Tramites = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState('todos');
-  const itemsPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -273,6 +266,10 @@ const Tramites = () => {
   useEffect(() => {
     setCurrentPage((p) => Math.min(p, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage, searchTerm, filterStatus]);
 
   return (
     <div className="tramites-container">
@@ -516,30 +513,59 @@ const Tramites = () => {
               <div className="tramites-pagination-info">
                 Mostrando {paginatedData.length} de {filteredData.length} registros
               </div>
-              <div className="tramites-pagination-controls">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  type="button"
-                  className="tramites-pagination-btn"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <FiChevronLeft />
-                </motion.button>
-                <span className="tramites-pagination-page">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  type="button"
-                  className="tramites-pagination-btn"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  <FiChevronRight />
-                </motion.button>
+
+              <div className="tramites-pagination-right">
+                <label className="tramites-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+
+                <div className="tramites-pagination-controls">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="tramites-pagination-btn"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <FiChevronLeft />
+                  </motion.button>
+
+                  <label className="tramites-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    >
+                      {Array.from({ length: totalPages }, (_, index) => (
+                        <option key={index + 1} value={index + 1}>
+                          {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </label>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="tramites-pagination-btn"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <FiChevronRight />
+                  </motion.button>
+                </div>
               </div>
             </div>
           </div>
@@ -548,12 +574,13 @@ const Tramites = () => {
 
       <AnimatePresence>
         {isAddModalOpen && (
-          <div className="tramites-modal-overlay">
+          <div className="tramites-modal-overlay tramites-drawer-overlay">
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="tramites-modal-panel tramites-modal-add"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "tween", duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+              className="tramites-modal-panel tramites-modal-add tramites-drawer-panel"
             >
               <div className="tramites-modal-header">
                 <div className="tramites-modal-header-icon">
@@ -664,12 +691,13 @@ const Tramites = () => {
 
       <AnimatePresence>
         {isEditModalOpen && (
-          <div className="tramites-modal-overlay">
+          <div className="tramites-modal-overlay tramites-drawer-overlay">
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="tramites-modal-panel tramites-modal-add"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "tween", duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+              className="tramites-modal-panel tramites-modal-add tramites-drawer-panel"
             >
               <div className="tramites-modal-header">
                 <h2 className="tramites-modal-title">Editar Trámite</h2>

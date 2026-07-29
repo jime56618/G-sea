@@ -6,3 +6,5 @@ export const API_URL =
 export const AUTH_SESSION_KEY = 'auth_session';
 export const TOKEN_KEY = 'token';
 export const USER_KEY = 'user';
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('API_URL:', API_URL);

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import { 
@@ -67,7 +68,7 @@ const SeguimientoCobranza = () => {
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
   const [currentRegistro, setCurrentRegistro] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   const loadRegistros = useCallback(async () => {
     setLoadError('');
@@ -103,7 +104,16 @@ const SeguimientoCobranza = () => {
   const paginatedRegistros = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredRegistros.slice(start, start + itemsPerPage);
-  }, [filteredRegistros, currentPage]);
+  }, [filteredRegistros, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
 
   const handleOpenAdd = () => {
     window.alert(
@@ -408,28 +418,60 @@ const SeguimientoCobranza = () => {
               <div className="cobranza-pagination-info">
                 Total: <span className="cobranza-pagination-highlight">{filteredRegistros.length}</span> cuotas
               </div>
-              <div className="cobranza-pagination-controls">
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="cobranza-pagination-btn cobranza-pagination-prev"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <FiChevronLeft />
-                </motion.button>
-                <span className="cobranza-pagination-page">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="cobranza-pagination-btn cobranza-pagination-next"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  <FiChevronRight />
-                </motion.button>
+
+              <div className="cobranza-pagination-options">
+                <label className="cobranza-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  >
+                    {[5, 10, 20, 50].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="cobranza-pagination-controls">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="cobranza-pagination-btn cobranza-pagination-prev"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    aria-label="Página anterior"
+                  >
+                    <FiChevronLeft />
+                  </motion.button>
+
+                  <label className="cobranza-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    >
+                      {Array.from({ length: totalPages }, (_, index) => (
+                        <option key={index + 1} value={index + 1}>
+                          {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </label>
+
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="cobranza-pagination-btn cobranza-pagination-next"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    aria-label="Página siguiente"
+                  >
+                    <FiChevronRight />
+                  </motion.button>
+                </div>
               </div>
             </div>
           </div>
@@ -437,14 +479,22 @@ const SeguimientoCobranza = () => {
       </div>
 
       {/* Modal de Agregar/Editar */}
-      <AnimatePresence>
-        {modalOpen && currentRegistro && (
-          <div className="cobranza-modal-overlay">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="cobranza-modal-panel cobranza-modal-form"
+      {createPortal(
+        <AnimatePresence>
+          {modalOpen && currentRegistro && (
+            <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="cobranza-modal-overlay cobranza-drawer-overlay"
+          >
+            <motion.div
+              initial={{ x: 56, opacity: 0.96 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 56, opacity: 0.96 }}
+              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+              className="cobranza-modal-panel cobranza-modal-form cobranza-drawer-panel"
             >
               <div className="cobranza-modal-header">
                 
@@ -578,9 +628,11 @@ const SeguimientoCobranza = () => {
                 </div>
               </form>
             </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Modal de Eliminar */}
       <AnimatePresence>

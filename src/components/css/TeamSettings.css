@@ -1,0 +1,448 @@
+/* ==========================================================
+   TEAM SETTINGS — CSS EXCLUSIVO DEL MÓDULO
+   Reestructurado: sin hacks de margin negativo, responsive real,
+   mismos colores del sistema (#001f3f, #1e488f, #64748b, #e5eaf1).
+   ========================================================== */
+
+.gsea-team-page {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 28px 30px 40px 0;
+}
+
+.gsea-team-page * {
+  box-sizing: border-box;
+}
+
+/* ---------- Overview (form + resumen) ---------- */
+.gsea-team-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  margin-bottom: 18px;
+  align-items: stretch;
+}
+
+.gsea-card {
+  background: #ffffff;
+  border: 1px solid #e5eaf1;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(9, 50, 74, 0.05);
+  min-width: 0;
+}
+
+.gsea-team-invite-card {
+  padding: 26px 28px;
+}
+
+.gsea-team-card-head {
+  margin-bottom: 4px;
+}
+
+.gsea-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: #001f3f;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.gsea-card__title svg {
+  color: #1e488f;
+  flex-shrink: 0;
+}
+
+.gsea-team-card-copy {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* ---------- Formulario ---------- */
+.gsea-team-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  margin-top: 22px;
+}
+
+.gsea-team-field {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.gsea-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.gsea-input-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.gsea-input-icon {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.gsea-input,
+.gsea-select {
+  width: 100%;
+  height: 48px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #001f3f;
+  font-size: 0.86rem;
+  padding: 0 14px;
+}
+
+.gsea-input--icon {
+  padding-left: 40px;
+}
+
+.gsea-input:focus,
+.gsea-select:focus {
+  outline: none;
+  border-color: #1e488f;
+  box-shadow: 0 0 0 3px rgba(30, 72, 143, 0.08);
+}
+
+.gsea-btn-primary {
+  height: 48px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 10px;
+  background: #1e488f;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.gsea-btn-primary:hover {
+  background: #163a73;
+}
+
+.gsea-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gsea-team-submit {
+  align-self: flex-end;
+}
+
+.gsea-msg {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.gsea-msg--error {
+  color: #dc2626;
+}
+
+/* ---------- Link de invitación ---------- */
+.gsea-invite-link-box {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e5eaf1;
+}
+
+.gsea-invite-link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.gsea-invite-link-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  color: #001f3f;
+}
+
+.gsea-btn-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1e488f;
+  cursor: pointer;
+}
+
+.gsea-btn-icon:hover {
+  background: #f1f5f9;
+}
+
+/* ---------- Resumen (aside) ---------- */
+.gsea-team-summary-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 26px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.gsea-stat-card__label {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gsea-stat-card__value {
+  margin: 4px 0 0;
+  color: #001f3f;
+  font-size: 2.4rem;
+  font-weight: 800;
+}
+
+.gsea-team-summary-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.gsea-team-summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e5eaf1;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.gsea-team-summary-item strong {
+  color: #001f3f;
+  font-size: 0.94rem;
+}
+
+/* ---------- Historial ---------- */
+.gsea-team-history-card {
+  padding: 24px 28px 28px;
+}
+
+.gsea-team-history-head {
+  margin-bottom: 18px;
+}
+
+.gsea-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
+}
+
+.gsea-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.gsea-table th {
+  text-align: left;
+  padding: 13px 16px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gsea-table td {
+  padding: 14px 16px;
+  color: #334155;
+  font-size: 0.86rem;
+  border-top: 1px solid #e5eaf1;
+}
+
+.gsea-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.gsea-badge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.gsea-badge--muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.gsea-config-loading,
+.gsea-config-muted {
+  color: #64748b;
+  font-size: 0.86rem;
+  padding: 20px 0;
+}
+
+.gsea-config-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: #64748b;
+  text-align: center;
+}
+
+.gsea-config-empty__icon {
+  color: #94a3b8;
+}
+
+/* ==========================================================
+   RESPONSIVE
+   ========================================================== */
+
+/* Tablet grande */
+@media (max-width: 1100px) {
+  .gsea-team-page {
+    padding: 24px 22px 34px 0;
+  }
+
+  .gsea-team-overview {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+}
+
+/* Tablet / overview apilado */
+@media (max-width: 820px) {
+  .gsea-team-page {
+    padding: 20px 18px 30px 0;
+  }
+
+  .gsea-team-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .gsea-team-summary-card {
+    min-height: auto;
+  }
+}
+
+/* Móvil: form apilado, botón full-width, tabla en tarjetas */
+@media (max-width: 640px) {
+  .gsea-team-page {
+    padding: 16px 14px 26px 0;
+  }
+
+  .gsea-team-invite-card,
+  .gsea-team-history-card,
+  .gsea-team-summary-card {
+    padding: 20px 18px;
+  }
+
+  .gsea-team-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gsea-team-field {
+    flex-basis: auto;
+  }
+
+  .gsea-btn-primary.gsea-team-submit {
+    width: 100%;
+  }
+
+  .gsea-invite-link-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gsea-btn-icon {
+    width: 100%;
+    height: 42px;
+  }
+
+  /* Tabla → tarjetas apiladas */
+  .gsea-table-wrap {
+    border: none;
+    overflow: visible;
+  }
+
+  .gsea-table,
+  .gsea-table thead,
+  .gsea-table tbody,
+  .gsea-table th,
+  .gsea-table td,
+  .gsea-table tr {
+    display: block;
+  }
+
+  .gsea-table {
+    min-width: 0;
+  }
+
+  .gsea-table thead {
+    display: none;
+  }
+
+  .gsea-table tr {
+    background: #ffffff;
+    border: 1px solid #e5eaf1;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 6px 14px;
+  }
+
+  .gsea-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid #f1f5f9;
+    font-size: 0.84rem;
+  }
+
+  .gsea-table td:first-child {
+    border-top: none;
+  }
+
+  .gsea-table td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+}

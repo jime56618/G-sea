@@ -1,21 +1,5 @@
-/**
- * Seguimiento de Pólizas — integración con Laravel API.
- *
- * Ajusta imports a tu estructura, ej:
- *   import Sidebar from '../components/Sidebar';
- *   import Navbar from '../components/Navbar';
- *   import './css/SeguimientoPolizas.css';
- *
- * Requiere: token Sanctum, workspace activo (current_workspace_id).
- *
- * Backend POST /api/polizas exige: contratante_id, aseguradora_id, ramo_id, subramo_id,
- * numero_poliza, inicio_vigencia, fin_vigencia; opcional agente_id (id de agente_workspaces),
- * fecha_emision, primas, vehiculo, cobranza (frecuencia_cobro: unico|mensual|trimestral,
- * monto_cuota, telefono_notificacion). Las cuotas se generan en cobranza_cuotas al guardar.
- * Calendario: GET /api/calendar/cobranza-cuotas?year=2026&month=4 (o from, to).
- */
-
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -132,6 +116,7 @@ const SeguimientoPolizas = () => {
   const [modalType, setModalType] = useState(null);
   const [selectedPoliza, setSelectedPoliza] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -145,7 +130,6 @@ const SeguimientoPolizas = () => {
     agentesWorkspace: [],
   });
 
-  const itemsPerPage = 5;
 
   const loadCatalogos = useCallback(async () => {
     const [contratantes, aseguradoras, ramos, subramos, agentesWorkspace] = await Promise.all([
@@ -208,11 +192,15 @@ const SeguimientoPolizas = () => {
   const paginatedPolizas = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredPolizas.slice(start, start + itemsPerPage);
-  }, [filteredPolizas, currentPage]);
+  }, [filteredPolizas, currentPage, itemsPerPage]);
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   const getStatusConfig = (estatus) => {
     return estatus === 'Vigente'
@@ -440,32 +428,59 @@ const SeguimientoPolizas = () => {
                 <span className="polizas-pagination-highlight">{filteredPolizas.length}</span> registros
               </div>
 
-              <div className="polizas-pagination-right polizas-pagination-right-inline">
-                <button
-                  type="button"
-                  className="polizas-pagination-arrowSolo"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  aria-label="Página anterior"
-                  title="Anterior"
-                >
-                  <ChevronLeft size={16} />
-                </button>
+              <div className="polizas-pagination-options">
+                <label className="polizas-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  >
+                    {[5, 10, 20, 50].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                <span className="polizas-pagination-pageLabel polizas-pagination-pageLabel-inline">
-                  Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-                </span>
+                <div className="polizas-pagination-right polizas-pagination-right-inline">
+                  <button
+                    type="button"
+                    className="polizas-pagination-arrowSolo"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    aria-label="Página anterior"
+                    title="Anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  className="polizas-pagination-arrowSolo"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages || filteredPolizas.length === 0}
-                  aria-label="Página siguiente"
-                  title="Siguiente"
-                >
-                  <ChevronRight size={16} />
-                </button>
+                  <label className="polizas-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    >
+                      {Array.from({ length: totalPages }, (_, index) => (
+                        <option key={index + 1} value={index + 1}>
+                          {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="polizas-pagination-arrowSolo"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages || filteredPolizas.length === 0}
+                    aria-label="Página siguiente"
+                    title="Siguiente"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -547,6 +562,7 @@ function agentesFiltradosPorAseguradora(agentesWorkspace, aseguradoraId) {
 
 const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm }) => {
   const isEdit = type === 'edit' && data?.raw;
+  const isDrawer = type === 'add' || type === 'edit';
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [formData, setFormData] = useState(() => emptyForm());
@@ -652,8 +668,22 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
   };
 
   return (
-    <div className="polizas-modal-overlay">
-      <div className={`polizas-modal ${type === 'delete' ? 'polizas-modal-delete' : ''}`}>
+    <motion.div
+      initial={isDrawer ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
+      exit={isDrawer ? { opacity: 0 } : undefined}
+      transition={isDrawer ? { duration: 0.22, ease: 'easeOut' } : undefined}
+      className={`polizas-modal-overlay ${isDrawer ? 'polizas-drawer-overlay' : ''}`}
+    >
+      <motion.div
+        initial={isDrawer ? { x: 56, opacity: 0.96 } : false}
+        animate={isDrawer ? { x: 0, opacity: 1 } : undefined}
+        exit={isDrawer ? { x: 56, opacity: 0.96 } : undefined}
+        transition={isDrawer ? { duration: 0.34, ease: [0.22, 1, 0.36, 1] } : undefined}
+        className={`polizas-modal ${type === 'delete' ? 'polizas-modal-delete' : ''} ${
+          isDrawer ? 'polizas-drawer-panel' : ''
+        }`}
+      >
         <div className="polizas-modal-header">
           <h3 className="polizas-modal-title">{getModalTitle()}</h3>
           <button type="button" onClick={onClose} className="polizas-modal-close">
@@ -919,8 +949,8 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
             </form>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

@@ -504,24 +504,62 @@ export default function SeccionAgentes() {
               <p className="agents-pagination-info">
                 Mostrando {table.getRowModel().rows.length} de {datosFiltrados.length} registros
               </p>
-              <div className="agents-pagination-controls">
-                <button 
-                  onClick={() => table.previousPage()} 
-                  disabled={!table.getCanPreviousPage()} 
-                  className="agents-pagination-button"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <span className="agents-pagination-page">
-                  Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-                </span>
-                <button 
-                  onClick={() => table.nextPage()} 
-                  disabled={!table.getCanNextPage()} 
-                  className="agents-pagination-button"
-                >
-                  <ChevronRight size={18} />
-                </button>
+
+              <div className="agents-pagination-right">
+                <label className="agents-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={table.getState().pagination.pageSize}
+                    onChange={(e) => {
+                      table.setPageSize(Number(e.target.value));
+                      table.setPageIndex(0);
+                    }}
+                  >
+                    {[5, 8, 10, 20, 50].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="agents-pagination-controls">
+                  <button
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="agents-pagination-button"
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+
+                  <label className="agents-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={table.getState().pagination.pageIndex + 1}
+                      onChange={(e) => table.setPageIndex(Number(e.target.value) - 1)}
+                    >
+                      {Array.from(
+                        { length: Math.max(1, table.getPageCount()) },
+                        (_, index) => (
+                          <option key={index + 1} value={index + 1}>
+                            {index + 1}
+                          </option>
+                        )
+                      )}
+                    </select>
+                    <span>de {Math.max(1, table.getPageCount())}</span>
+                  </label>
+
+                  <button
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="agents-pagination-button"
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -531,10 +569,23 @@ export default function SeccionAgentes() {
       {/* Modal de Agregar/Editar */}
       <AnimatePresence>
         {(agentToEdit || isAddModalOpen) && (
-          <Dialog as="div" className="agents-modal" onClose={() => { setAgentToEdit(null); setIsAddModalOpen(false); }} open={true}>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="agents-modal-overlay" />
-            <div className="agents-modal-container">
-              <Dialog.Panel className="agents-modal-panel">
+          <Dialog as="div" className="agents-modal agents-drawer" onClose={() => { setAgentToEdit(null); setIsAddModalOpen(false); }} open={true}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="agents-modal-overlay agents-drawer-overlay"
+            />
+            <div className="agents-modal-container agents-drawer-container">
+              <Dialog.Panel
+                as={motion.div}
+                initial={{ x: 56, opacity: 0.96 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 56, opacity: 0.96 }}
+                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                className="agents-modal-panel agents-drawer-panel"
+              >
                 <div className="agents-modal-header">
                   <h2 className="agents-modal-title">{agentToEdit ? 'Editar Agente' : 'Agregar Nuevo Agente'}</h2>
                   <button onClick={() => {setAgentToEdit(null); setIsAddModalOpen(false);}} className="agents-modal-close">
@@ -553,7 +604,7 @@ export default function SeccionAgentes() {
                   <ModalInput label="CURP" icon={<User size={16}/>} value={formData.curp} onChange={(e) => setFormData({ ...formData, curp: e.target.value })} />
                   <ModalInput label="RFC" icon={<User size={16}/>} value={formData.rfc} onChange={(e) => setFormData({ ...formData, rfc: e.target.value })} />
                   <div className="agents-modal-input-group agents-full-width">
-                    <label className="agents-modal-input-label">Status</label>
+                    <label className="agents-modal-input-label agents-status-label">Status</label>
                     <div className="agents-modal-input-wrapper">
                       <span className="agents-modal-input-icon"><Filter size={16} /></span>
                       <select className="agents-modal-input-field" value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
