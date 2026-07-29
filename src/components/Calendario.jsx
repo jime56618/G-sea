@@ -131,6 +131,7 @@ export default function CobranzaPage() {
   const [chatModal, setChatModal] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [message, setMessage] = useState("");
+  const [whatsappSuccessMsg, setWhatsappSuccessMsg] = useState("");
   const [taskCategory, setTaskCategory] = useState("follow_up");
 
   const [newType, setNewType] = useState("follow_up");
@@ -368,21 +369,40 @@ Si tienes alguna duda estoy para ayudarte.`;
     setContextMenu(null);
   };
 
+  const showWhatsappSuccess = (text) => {
+    setWhatsappSuccessMsg(text);
+    window.clearTimeout(showWhatsappSuccess._t);
+    showWhatsappSuccess._t = window.setTimeout(() => setWhatsappSuccessMsg(""), 3500);
+  };
+
   const sendChatMessage = () => {
     if (!message || !activeChat) return;
+
+    const textToSend = message.trim();
+    if (!textToSend) return;
 
     const now = new Date();
     const time = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
 
     const prev = chats[activeChat.id] || [];
-    const updated = [...prev, { from: "agente", text: message, time }];
+    const updated = [...prev, { from: "agente", text: textToSend, time }];
 
     setChats({
       ...chats,
       [activeChat.id]: updated
     });
 
+    const phone = String(activeChat.telefono || "").replace(/\D/g, "");
+    if (phone) {
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(textToSend)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    }
+
     setMessage("");
+    showWhatsappSuccess("WhatsApp enviado correctamente.");
   };
 
   const createEvent = async () => {
@@ -494,6 +514,12 @@ return (
         <Navbar />
 
         <main className="cobranza-main">
+          {whatsappSuccessMsg && (
+            <div className="cobranza-toast-success" role="status">
+              {whatsappSuccessMsg}
+            </div>
+          )}
+
           {/* Header */}
           <div className="cobranza-header">
             <div>
@@ -526,7 +552,7 @@ return (
                 className="cobranza-btn-secondary"
               >
                 <MessageSquare size={18} />
-                <span>Chat Inteligente</span>
+                <span>WhatsApp</span>
               </motion.button>
             </div>
           </div>
@@ -721,7 +747,7 @@ return (
           >
             <button onClick={sendMessage} className="cobranza-context-item">
               <Send size={16} />
-              <span>Enviar mensaje</span>
+              <span>Enviar WhatsApp</span>
             </button>
             <button onClick={openEditModal} className="cobranza-context-item">
               <Edit size={16} />
@@ -1287,7 +1313,7 @@ return (
                 <div className="cobranza-modal-icon">
                   <MessageSquare size={24} />
                 </div>
-                <h2 className="cobranza-modal-title">Chat Inteligente</h2>
+                <h2 className="cobranza-modal-title">WhatsApp</h2>
                 <button className="cobranza-modal-close" onClick={() => setChatModal(false)}>
                   <X size={20} />
                 </button>

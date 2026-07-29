@@ -1,6 +1,4 @@
-/* Clientes.css - CSS específico para la sección de clientes */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
 * {
   margin: 0;
@@ -9,7 +7,7 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   background: #f8fafc;
   overflow-x: hidden;
 }
@@ -927,7 +925,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 900;
   color: #001F3F;
   margin-bottom: 16px;
   text-transform: uppercase;
@@ -1466,5 +1464,352 @@ body {
 @media (max-width: 1200px) {
   .clientes-table {
     min-width: 1200px;
+  }
+}
+
+/* ==========================================================
+   PATCH FINAL — CLIENTES
+   Drawer sutil para agregar/editar, paginación configurable
+   y responsive. El modal de eliminación se conserva intacto.
+   ========================================================== */
+
+.clientes-container,
+.clientes-container * {
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Sincronización con sidebar */
+.clientes-main-content {
+  min-width: 0;
+  width: auto;
+  transition: margin-left 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.clientes-main-content.clientes-sidebar-expanded {
+  margin-left: 248px;
+}
+
+.clientes-main-content.clientes-sidebar-collapsed {
+  margin-left: 72px;
+}
+
+/* Al eliminar el avatar, el contenido queda alineado */
+.clientes-client-cell {
+  display: flex;
+  align-items: center;
+}
+
+.clientes-client-info {
+  margin-left: 0;
+}
+
+/* Drawer solo para agregar/editar */
+.clientes-drawer-overlay {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+  background: rgba(11, 27, 61, 0.38);
+  backdrop-filter: blur(1.5px);
+  animation: none;
+}
+
+.clientes-drawer-panel {
+  width: min(860px, 94vw);
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 0;
+  animation: none !important;
+  box-shadow: -18px 0 50px rgba(11, 27, 61, 0.18);
+  transform-origin: right center;
+  will-change: transform, opacity;
+}
+
+.clientes-drawer-panel .clientes-modal-header {
+  min-height: 102px;
+  flex-shrink: 0;
+  padding: 28px 36px;
+  background: #f7f7f8;
+  border-bottom: 1px solid #e7ebf2;
+}
+
+.clientes-drawer-panel .clientes-modal-title {
+  color: #0b1b3d;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.clientes-drawer-panel .clientes-modal-close-btn {
+  width: 38px;
+  height: 38px;
+  color: #8b95a7;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+}
+
+.clientes-drawer-panel .clientes-modal-close-btn:hover {
+  color: #0b1b3d;
+  background: #eef1f5;
+}
+
+.clientes-drawer-panel .clientes-modal-form-content {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.clientes-drawer-panel .clientes-form-section {
+  min-height: 0;
+  flex: 1;
+  margin: 0;
+  padding: 32px 54px 38px 34px;
+  overflow-y: auto;
+  border-bottom: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #cfd6e1 transparent;
+}
+
+.clientes-drawer-panel .clientes-form-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.clientes-drawer-panel .clientes-form-section::-webkit-scrollbar-thumb {
+  background: #cfd6e1;
+  border-radius: 999px;
+}
+
+.clientes-drawer-panel .clientes-form-section-title {
+  margin-bottom: 8px;
+  color: #0b1b3d;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.clientes-drawer-panel .clientes-form-grid {
+  grid-template-columns: 1fr;
+  gap: 22px;
+  margin-top: 24px;
+}
+
+.clientes-drawer-panel .clientes-form-group,
+.clientes-drawer-panel .clientes-form-group.clientes-full-width {
+  grid-column: auto;
+  display: grid;
+  grid-template-columns: minmax(145px, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.clientes-drawer-panel .clientes-form-group label {
+  color: #5b5d5e;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: right;
+  text-transform: none;
+}
+
+.clientes-drawer-panel .clientes-form-group input,
+.clientes-drawer-panel .clientes-form-group select {
+  width: 100%;
+  height: 58px;
+  padding: 0 18px;
+  color: #0b1b3d;
+  background: #ffffff;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.clientes-drawer-panel .clientes-form-group input:focus,
+.clientes-drawer-panel .clientes-form-group select:focus {
+  border-color: #00529b;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 82, 155, 0.08);
+}
+
+.clientes-drawer-panel .clientes-form-actions {
+  min-height: 94px;
+  flex-shrink: 0;
+  align-items: center;
+  margin: 0;
+  padding: 18px 36px;
+  background: #ffffff;
+  border-top: 1px solid #e7ebf2;
+}
+
+.clientes-drawer-panel .clientes-btn-cancel,
+.clientes-drawer-panel .clientes-btn-save {
+  min-width: 150px;
+  min-height: 50px;
+  padding: 0 22px;
+  border-radius: 9px;
+  font-size: 0.88rem;
+}
+
+.clientes-drawer-panel .clientes-btn-save {
+  color: #0b1b3d;
+  background: #00e676;
+  box-shadow: none;
+}
+
+.clientes-drawer-panel .clientes-btn-save:hover {
+  color: #ffffff;
+  background: #00529b;
+  box-shadow: none;
+}
+
+/* Paginación */
+.clientes-pagination-right,
+.clientes-page-size,
+.clientes-page-picker {
+  display: flex;
+  align-items: center;
+}
+
+.clientes-pagination-right {
+  justify-content: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.clientes-page-size,
+.clientes-page-picker {
+  gap: 8px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.clientes-page-size select,
+.clientes-page-picker select {
+  height: 38px;
+  padding: 0 30px 0 11px;
+  color: #0b1b3d;
+  background: #ffffff;
+  border: 1px solid #dfe4ec;
+  border-radius: 9px;
+  outline: none;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.clientes-page-size select:focus,
+.clientes-page-picker select:focus {
+  border-color: #00529b;
+  box-shadow: 0 0 0 3px rgba(0, 82, 155, 0.07);
+}
+
+/* Responsive */
+@media (max-width: 820px) {
+  .clientes-main-content.clientes-sidebar-expanded,
+  .clientes-main-content.clientes-sidebar-collapsed {
+    width: auto;
+    margin-left: 72px;
+  }
+
+  .clientes-main {
+    padding: 20px 16px;
+  }
+
+  .clientes-pagination-wrapper,
+  .clientes-pagination-right {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .clientes-page-size,
+  .clientes-pagination-controls {
+    justify-content: center;
+  }
+
+  .clientes-drawer-panel {
+    width: min(780px, 96vw);
+  }
+
+  .clientes-drawer-panel .clientes-form-section {
+    padding: 28px 34px;
+  }
+
+  .clientes-drawer-panel .clientes-form-group,
+  .clientes-drawer-panel .clientes-form-group.clientes-full-width {
+    grid-template-columns: minmax(130px, 160px) minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .clientes-main {
+    padding: 16px 12px;
+  }
+
+  .clientes-drawer-panel {
+    width: 100vw;
+  }
+
+  .clientes-drawer-panel .clientes-modal-header {
+    min-height: 78px;
+    padding: 18px 20px;
+  }
+
+  .clientes-drawer-panel .clientes-modal-title {
+    font-size: 1.15rem;
+  }
+
+  .clientes-drawer-panel .clientes-form-section {
+    padding: 22px 18px 28px;
+  }
+
+  .clientes-drawer-panel .clientes-form-group,
+  .clientes-drawer-panel .clientes-form-group.clientes-full-width {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .clientes-drawer-panel .clientes-form-group label {
+    text-align: left;
+    font-size: 0.74rem;
+  }
+
+  .clientes-drawer-panel .clientes-form-group input,
+  .clientes-drawer-panel .clientes-form-group select {
+    height: 52px;
+    font-size: 0.86rem;
+  }
+
+  .clientes-drawer-panel .clientes-form-actions {
+    min-height: auto;
+    flex-direction: column-reverse;
+    padding: 14px 18px;
+  }
+
+  .clientes-drawer-panel .clientes-btn-cancel,
+  .clientes-drawer-panel .clientes-btn-save {
+    width: 100%;
+  }
+
+  .clientes-page-picker {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .clientes-main-content.clientes-sidebar-expanded,
+  .clientes-main-content.clientes-sidebar-collapsed {
+    margin-left: 64px;
+  }
+
+  .clientes-pagination-controls {
+    gap: 7px;
   }
 }

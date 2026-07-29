@@ -91,7 +91,9 @@ export function getActiveWorkspaceId() {
 }
 
 export function isWorkspaceLocked(session = getAuthSession()) {
-  const sub = session?.current_workspace?.subscription;
-  if (!sub) return true;
+  if (!session?.current_workspace) return false;
+  const sub = session.current_workspace.subscription;
+  // Sin datos de suscripción aún: no bloquear (evita pantallas de carga / redirecciones)
+  if (!sub) return false;
   return Boolean(sub.is_locked) || sub.is_accessible === false;
 }

@@ -1,15 +1,21 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, User, FileText,
   Calendar, DollarSign, GraduationCap,
-  ClipboardList, LogOut, Settings,
+  ClipboardList, LogOut, Settings, ShieldCheck, Database, UserCircle,
+  Search, ChevronLeft, ChevronRight,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
-import { MENU_ITEMS, ADMIN_MENU_ITEMS, filterMenuByPermissions } from "../utils/permissions";
+import {
+  MENU_ITEMS,
+  ADMIN_MENU_ITEMS,
+  filterMenuByPermissions,
+} from "../utils/permissions";
 
 import logoGSEA from "../assets/images/logo-gsea.png";
+import "./css/Sidebar.css";
 
 const PATH_ICONS = {
   "/dashboard": LayoutDashboard,
@@ -20,6 +26,9 @@ const PATH_ICONS = {
   "/seguimiento-cobranza": DollarSign,
   "/capacitacion": GraduationCap,
   "/calendario": Calendar,
+  "/configuracion/perfil": UserCircle,
+  "/configuracion/seguridad": ShieldCheck,
+  "/configuracion/mis-datos": Database,
   "/configuracion/equipo": Users,
   "/configuracion/roles": Settings,
   "/configuracion/facturacion": DollarSign,
@@ -27,11 +36,13 @@ const PATH_ICONS = {
 
 function itemIcon(path) {
   const Icon = PATH_ICONS[path] || FileText;
-  return <Icon size={22} />;
+  return <Icon size={19} strokeWidth={1.9} />;
 }
 
 export default function SidebarGSEA({ onExpand }) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
   const location = useLocation();
   const { session, logout } = useAuth();
 
@@ -53,245 +64,236 @@ export default function SidebarGSEA({ onExpand }) {
     [session]
   );
 
-  const handleLogout = () => logout();
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const filteredMainMenu = useMemo(() => {
+    if (!normalizedSearch) return mainMenu;
+
+    return mainMenu.filter((item) =>
+      item.label.toLowerCase().includes(normalizedSearch)
+    );
+  }, [mainMenu, normalizedSearch]);
+
+  const filteredAdminMenu = useMemo(() => {
+    if (!normalizedSearch) return adminMenu;
+
+    return adminMenu.filter((item) =>
+      item.label.toLowerCase().includes(normalizedSearch)
+    );
+  }, [adminMenu, normalizedSearch]);
+
   const toggleExpand = () => {
     const next = !isExpanded;
     setIsExpanded(next);
+
+    if (!next) {
+      setSearchTerm("");
+    }
+
     onExpand?.(next);
   };
 
   return (
     <>
-      {/* CSS para eliminar scroll y estilos premium */}
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Efecto de brillo en hover para items */
-        .menu-item-hover {
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .menu-item-hover::after {
-          content: '';
-          position: absolute;
-          top: -50%;
-          left: -50%;
-          width: 200%;
-          height: 200%;
-          background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-          opacity: 0;
-          transition: opacity 0.3s;
-          pointer-events: none;
-        }
-        
-        .menu-item-hover:hover::after {
-          opacity: 1;
-        }
-      `}</style>
-
-      <motion.aside 
+      <motion.aside
         initial={false}
-        animate={{ width: isExpanded ? 280 : 88 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed inset-y-0 left-0 bg-[#001E42] text-white flex flex-col shadow-2xl z-50 border-r border-blue-900/30"
+        animate={{ width: isExpanded ? 248 : 72 }}
+        transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
+        className={`gsea-sidebar ${isExpanded ? "is-expanded" : "is-collapsed"}`}
       >
-        {/* Barra interactiva para expandir/colapsar */}
-        <div 
-          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-blue-400/20 transition-colors z-10 group"
-          onClick={toggleExpand}
-          title={isExpanded ? "Colapsar menú" : "Expandir menú"}
-        >
-          <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1 h-8 bg-blue-400/30 rounded-full group-hover:bg-blue-400/60 transition-colors"></div>
-        </div>
+        <div className="gsea-sidebar__header">
+          <div className="gsea-sidebar__brand">
+            <div className="gsea-sidebar__logo">
+              <img src={logoGSEA} alt="GSEA CRM" />
+            </div>
 
-        {/* Logo Sección con tu logo importado */}
-        <div className="h-24 flex items-center px-6 flex-shrink-0 relative">
-          <div className="flex items-center gap-4">
-            <motion.div 
-              whileHover={{ scale: 1.05 }}
-              className="min-w-[48px] h-[48px] rounded-xl flex items-center justify-center overflow-hidden"
-            >
-              <img 
-                src={logoGSEA} 
-                alt="GSEA Logo" 
-                className="w-full h-full object-contain"
-              />
-            </motion.div>
-            
-            <AnimatePresence mode="wait">
+            <AnimatePresence initial={false}>
               {isExpanded && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -10 }}
+                <motion.div
+                  initial={{ opacity: 0, x: -7 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.2 }}
+                  exit={{ opacity: 0, x: -7 }}
+                  transition={{ duration: 0.16 }}
+                  className="gsea-sidebar__brand-copy"
                 >
-                  <h2 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-                    GSEA CRM
-                  </h2>
+                  <strong>GSEA</strong>
+                  <span>CRM Platform</span>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
+
+          <button
+            type="button"
+            onClick={toggleExpand}
+            className="gsea-sidebar__toggle"
+            aria-label={isExpanded ? "Colapsar menú" : "Expandir menú"}
+            title={isExpanded ? "Colapsar menú" : "Expandir menú"}
+          >
+            {isExpanded ? (
+              <ChevronLeft size={17} />
+            ) : (
+              <ChevronRight size={17} />
+            )}
+          </button>
         </div>
 
-        {/* Línea decorativa */}
-        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-blue-400/30 to-transparent"></div>
-
-        {/* Módulos */}
-        <nav className="flex-1 overflow-y-auto no-scrollbar px-3 py-6 space-y-1">
-          {mainMenu.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link key={item.path} to={item.path} className="block group">
-                <motion.div
-                  className={`relative flex items-center h-11 rounded-xl transition-all duration-300 menu-item-hover ${
-                    isActive 
-                      ? "bg-gradient-to-r from-blue-600 to-blue-500 shadow-lg shadow-blue-600/30" 
-                      : "hover:bg-blue-800/30"
-                  } px-3`}
-                  whileHover={{ x: isExpanded ? 8 : 0 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {/* Indicador de activo */}
-                  {isActive && isExpanded && (
-                    <motion.div 
-                      className="absolute left-0 w-1 h-6 bg-white rounded-r-full"
-                      layoutId="activeIndicator"
-                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    />
-                  )}
-                  
-                  {/* Icono */}
-                  <div className={`${isActive ? 'text-white' : 'text-blue-300/80 group-hover:text-blue-200'} transition-colors`}>
-                    {item.icon}
-                  </div>
-                  
-                  {/* Label */}
-                  <AnimatePresence mode="wait">
-                    {isExpanded && (
-                      <motion.span 
-                        className="ml-4 font-medium text-sm tracking-wide"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        {item.label}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Tooltip para versión colapsada */}
-                  {!isExpanded && (
-                    <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-xl border border-gray-800 pointer-events-none">
-                      <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45 border-l border-b border-gray-800"></div>
-                      {item.label}
-                    </div>
-                  )}
-                </motion.div>
-              </Link>
-            );
-          })}
-
-          {adminMenu.length > 0 && isExpanded && (
-            <p className="px-3 pt-4 pb-1 text-[10px] uppercase tracking-widest text-blue-300/60 font-bold">
-              Configuración
-            </p>
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              className="gsea-sidebar__search-wrap"
+            >
+              <div className="gsea-sidebar__search">
+                <Search size={15} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar"
+                  aria-label="Buscar módulo"
+                />
+              </div>
+            </motion.div>
           )}
-          {adminMenu.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link key={item.path} to={item.path} className="block group">
-                <motion.div
-                  className={`relative flex items-center h-11 rounded-xl transition-all duration-300 menu-item-hover ${
-                    isActive
-                      ? "bg-gradient-to-r from-blue-600 to-blue-500 shadow-lg shadow-blue-600/30"
-                      : "hover:bg-blue-800/30"
-                  } px-3`}
-                  whileHover={{ x: isExpanded ? 8 : 0 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <div className={`${isActive ? 'text-white' : 'text-blue-300/80 group-hover:text-blue-200'} transition-colors`}>
-                    {item.icon}
-                  </div>
-                  <AnimatePresence mode="wait">
-                    {isExpanded && (
-                      <motion.span
-                        className="ml-4 font-medium text-sm tracking-wide"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                      >
-                        {item.label}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              </Link>
-            );
-          })}
+        </AnimatePresence>
+
+        <nav className="gsea-sidebar__nav">
+          <SidebarSectionTitle isExpanded={isExpanded}>
+            Principal
+          </SidebarSectionTitle>
+
+          <div className="gsea-sidebar__list">
+            {filteredMainMenu.map((item) => (
+              <SidebarItem
+                key={item.path}
+                item={item}
+                isActive={location.pathname === item.path}
+                isExpanded={isExpanded}
+              />
+            ))}
+          </div>
+
+          {filteredAdminMenu.length > 0 && (
+            <>
+              <SidebarSectionTitle isExpanded={isExpanded}>
+                Configuración
+              </SidebarSectionTitle>
+
+              <div className="gsea-sidebar__list">
+                {filteredAdminMenu.map((item) => (
+                  <SidebarItem
+                    key={item.path}
+                    item={item}
+                    isActive={location.pathname === item.path}
+                    isExpanded={isExpanded}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {isExpanded &&
+            normalizedSearch &&
+            filteredMainMenu.length === 0 &&
+            filteredAdminMenu.length === 0 && (
+              <p className="gsea-sidebar__empty">
+                No se encontró ningún módulo.
+              </p>
+            )}
         </nav>
 
-        {/* Footer */}
-        <div className="px-3 pb-4 flex-shrink-0">
-          {/* Línea separadora */}
-          <div className="mx-1 h-px bg-gradient-to-r from-transparent via-blue-400/20 to-transparent mb-3"></div>
-          
-          {/* Cerrar Sesión */}
-          <motion.button 
-            onClick={handleLogout}
-            whileHover={{ scale: 1.02, x: isExpanded ? 5 : 0 }}
-            whileTap={{ scale: 0.98 }}
-            className="flex items-center w-full h-11 px-3 rounded-xl hover:bg-red-500/10 text-red-400/90 hover:text-red-400 group transition-all duration-300 relative"
+        <div className="gsea-sidebar__footer">
+          <button
+            type="button"
+            onClick={logout}
+            className="gsea-sidebar__logout"
           >
-            <LogOut size={22} />
-            
-            <AnimatePresence mode="wait">
+            <span className="gsea-sidebar__item-icon">
+              <LogOut size={19} strokeWidth={1.9} />
+            </span>
+
+            <AnimatePresence initial={false}>
               {isExpanded && (
-                <motion.span 
-                  className="ml-4 font-medium text-sm tracking-wide"
-                  initial={{ opacity: 0, x: -10 }}
+                <motion.span
+                  initial={{ opacity: 0, x: -7 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
+                  exit={{ opacity: 0, x: -7 }}
+                  transition={{ duration: 0.16 }}
+                  className="gsea-sidebar__item-label"
                 >
-                  Cerrar Sesión
+                  Cerrar sesión
                 </motion.span>
               )}
             </AnimatePresence>
 
-            {/* Tooltip para logout */}
             {!isExpanded && (
-              <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-xl border border-gray-800 pointer-events-none">
-                <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45 border-l border-b border-gray-800"></div>
-                Cerrar Sesión
-              </div>
+              <span className="gsea-sidebar__tooltip">
+                Cerrar sesión
+              </span>
             )}
-          </motion.button>
-
-          {/* Versión */}
-          <AnimatePresence mode="wait">
-            {isExpanded && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                transition={{ duration: 0.3 }}
-                className="mt-4 text-center"
-              >
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </button>
         </div>
-
-        {/* Efecto de brillo */}
-        <div className="absolute inset-0 bg-gradient-to-t from-blue-600/5 via-transparent to-transparent pointer-events-none"></div>
       </motion.aside>
 
-      {/* Margen dinámico para contenido */}
-      <div style={{ marginLeft: isExpanded ? 280 : 88 }} className="transition-all duration-300 ease-in-out" />
+      <div
+        className="gsea-sidebar-spacer"
+        style={{ marginLeft: isExpanded ? 248 : 72 }}
+      />
     </>
+  );
+}
+
+function SidebarSectionTitle({ isExpanded, children }) {
+  if (!isExpanded) {
+    return <div className="gsea-sidebar__section-gap" />;
+  }
+
+  return (
+    <p className="gsea-sidebar__section-title">
+      {children}
+    </p>
+  );
+}
+
+function SidebarItem({ item, isActive, isExpanded }) {
+  return (
+    <Link
+      to={item.path}
+      className="gsea-sidebar__link"
+      aria-current={isActive ? "page" : undefined}
+    >
+      <motion.div
+        whileTap={{ scale: 0.985 }}
+        className={`gsea-sidebar__item ${isActive ? "is-active" : ""}`}
+      >
+        <span className="gsea-sidebar__item-icon">
+          {item.icon}
+        </span>
+
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.span
+              initial={{ opacity: 0, x: -7 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -7 }}
+              transition={{ duration: 0.16 }}
+              className="gsea-sidebar__item-label"
+            >
+              {item.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {!isExpanded && (
+          <span className="gsea-sidebar__tooltip">
+            {item.label}
+          </span>
+        )}
+      </motion.div>
+    </Link>
   );
 }

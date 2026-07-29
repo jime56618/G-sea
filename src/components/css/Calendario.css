@@ -1170,6 +1170,18 @@ body {
   gap: 12px;
 }
 
+.cobranza-toast-success {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1.15rem;
+  border-radius: 12px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.9rem;
+  font-weight: 600;
+  animation: fadeIn 0.25s ease-out;
+}
+
 /* ===== ANIMACIONES ===== */
 @keyframes fadeIn {
   from {

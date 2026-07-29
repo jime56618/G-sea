@@ -149,7 +149,9 @@ export default function UserNavbar() {
     }
   };
 
-  if (authLoading) return <p className="px-8">Cargando...</p>;
+  if (authLoading && !user) {
+    return <p className="px-8 text-slate-400 text-sm">Cargando…</p>;
+  }
 
   // 🔥 AVATAR DINÁMICO
   const avatarSrc = userData.avatarFile

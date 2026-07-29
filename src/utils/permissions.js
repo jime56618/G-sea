@@ -34,6 +34,9 @@ export const MENU_ITEMS = [
 ];
 
 export const ADMIN_MENU_ITEMS = [
+  { path: '/configuracion/perfil', label: 'Mi perfil', permission: null },
+  { path: '/configuracion/seguridad', label: 'Seguridad', permission: null },
+  { path: '/configuracion/mis-datos', label: 'Mis datos', permission: null },
   { path: '/configuracion/equipo', label: 'Equipo e invitaciones', permission: PERMISSIONS.USERS_INVITE },
   { path: '/configuracion/roles', label: 'Roles y permisos', permission: PERMISSIONS.ROLES_MANAGE },
   { path: '/configuracion/facturacion', label: 'Facturación', permission: PERMISSIONS.BILLING_MANAGE },

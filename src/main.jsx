@@ -1,13 +1,24 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom' // <-- 1. Agregamos esta importación
+import { BrowserRouter } from 'react-router-dom'
 
 import './index.css'
 import App from './App.jsx'
 
+const basename = window.location.hostname.includes('github.io')
+  ? '/gsea-dockerr'
+  : '';
+
+const redirect = sessionStorage.redirect;
+
+if (redirect) {
+  delete sessionStorage.redirect;
+  window.history.replaceState(null, '', redirect);
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter> {/* <-- 2. Envolvemos la App */}
+    <BrowserRouter basename={basename}>
       <App />
     </BrowserRouter>
   </StrictMode>,

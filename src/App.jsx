@@ -21,49 +21,45 @@ import TeamSettings from './components/TeamSettings';
 import RolesEditor from './components/RolesEditor';
 import BillingSettings from './components/BillingSettings';
 import IntegrationsPage from './components/IntegrationsPage';
+import ProfileSettings from './components/ProfileSettings';
+import MyDataSettings from './components/MyDataSettings';
+import SecuritySettings from './components/SecuritySettings';
+import { TerminosPage, AvisoPrivacidadPage } from './components/LegalPages';
 
 import './components/css/SaaS.css';
 
-function AppWithAuth({ children }) {
-  return (
-    <AuthProvider>
-      <ProtectedRoute>{children}</ProtectedRoute>
-    </AuthProvider>
-  );
-}
-
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/landing" replace />} />
-      <Route path="/landing" element={<Landing />} />
-      <Route path="/register" element={<AuthGSEA />} />
-      <Route path="/invitacion/:token" element={<AcceptInvitation />} />
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Navigate to="/landing" replace />} />
+        <Route path="/landing" element={<Landing />} />
+        <Route path="/register" element={<AuthGSEA />} />
+        <Route path="/login" element={<AuthGSEA />} />
+        <Route path="/terminos" element={<TerminosPage />} />
+        <Route path="/aviso-privacidad" element={<AvisoPrivacidadPage />} />
+        <Route path="/invitacion/:token" element={<AcceptInvitation />} />
+        <Route path="/billing-locked" element={<BillingLocked />} />
 
-      <Route
-        path="/billing-locked"
-        element={
-          <AuthProvider>
-            <BillingLocked />
-          </AuthProvider>
-        }
-      />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/agentes" element={<ProtectedRoute><Agentes /></ProtectedRoute>} />
+        <Route path="/tramites" element={<ProtectedRoute><Tramites /></ProtectedRoute>} />
+        <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+        <Route path="/seguimiento-cobranza" element={<ProtectedRoute><SeguimientoCobranza /></ProtectedRoute>} />
+        <Route path="/seguimiento-polizas" element={<ProtectedRoute><SeguimientoPolizas /></ProtectedRoute>} />
+        <Route path="/calendario" element={<ProtectedRoute><Calendario /></ProtectedRoute>} />
+        <Route path="/capacitacion" element={<ProtectedRoute><Capacitacion /></ProtectedRoute>} />
 
-      <Route path="/dashboard" element={<AppWithAuth><Dashboard /></AppWithAuth>} />
-      <Route path="/agentes" element={<AppWithAuth><Agentes /></AppWithAuth>} />
-      <Route path="/tramites" element={<AppWithAuth><Tramites /></AppWithAuth>} />
-      <Route path="/clientes" element={<AppWithAuth><Clientes /></AppWithAuth>} />
-      <Route path="/seguimiento-cobranza" element={<AppWithAuth><SeguimientoCobranza /></AppWithAuth>} />
-      <Route path="/seguimiento-polizas" element={<AppWithAuth><SeguimientoPolizas /></AppWithAuth>} />
-      <Route path="/calendario" element={<AppWithAuth><Calendario /></AppWithAuth>} />
-      <Route path="/capacitacion" element={<AppWithAuth><Capacitacion /></AppWithAuth>} />
+        <Route path="/configuracion/perfil" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
+        <Route path="/configuracion/seguridad" element={<ProtectedRoute><SecuritySettings /></ProtectedRoute>} />
+        <Route path="/configuracion/mis-datos" element={<ProtectedRoute><MyDataSettings /></ProtectedRoute>} />
+        <Route path="/configuracion/equipo" element={<ProtectedRoute><TeamSettings /></ProtectedRoute>} />
+        <Route path="/configuracion/roles" element={<ProtectedRoute><RolesEditor /></ProtectedRoute>} />
+        <Route path="/configuracion/facturacion" element={<ProtectedRoute><BillingSettings /></ProtectedRoute>} />
+        <Route path="/integraciones" element={<ProtectedRoute><IntegrationsPage /></ProtectedRoute>} />
 
-      <Route path="/configuracion/equipo" element={<AppWithAuth><TeamSettings /></AppWithAuth>} />
-      <Route path="/configuracion/roles" element={<AppWithAuth><RolesEditor /></AppWithAuth>} />
-      <Route path="/configuracion/facturacion" element={<AppWithAuth><BillingSettings /></AppWithAuth>} />
-      <Route path="/integraciones" element={<AppWithAuth><IntegrationsPage /></AppWithAuth>} />
-
-      <Route path="*" element={<Navigate to="/landing" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/landing" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }

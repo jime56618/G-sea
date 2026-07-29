@@ -4,7 +4,7 @@ import PageLayout, { ConfigPageHeader } from './PageLayout';
 import { apiFetch, ApiError } from '../utils/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { getActiveWorkspaceId } from '../utils/workspaceStorage';
-import './css/SaaS.css';
+import './css/TeamSettings.css';
 
 export default function TeamSettings() {
   const { can, currentWorkspace } = useAuth();
@@ -47,11 +47,13 @@ export default function TeamSettings() {
     setError('');
     setInviteLink('');
     setCopied(false);
+
     try {
       const inv = await apiFetch('/invitations', {
         method: 'POST',
         body: JSON.stringify({ email, role_id: Number(roleId) }),
       });
+
       const base = window.location.origin;
       setInviteLink(`${base}/invitacion/${inv.token}`);
       setEmail('');
@@ -86,115 +88,162 @@ export default function TeamSettings() {
   }
 
   const list = Array.isArray(invitations) ? invitations : [];
+  const pendingCount = list.filter((i) => !i.used).length;
+  const acceptedCount = list.filter((i) => i.used).length;
 
   return (
     <PageLayout>
-      <ConfigPageHeader
-        icon={Users}
-        title="Equipo e invitaciones"
-        subtitle={`Invita colaboradores a ${currentWorkspace?.nombre || 'tu promotoría'}. No inician un trial nuevo.`}
-      />
+      <section className="gsea-team-page">
+        <ConfigPageHeader
+          title="Equipo e invitaciones"
+          subtitle={`Invita colaboradores a ${
+            currentWorkspace?.nombre || 'tu promotoría'
+          }. No inician un trial nuevo.`}
+        />
 
-      <div className="gsea-config-grid gsea-config-grid--2">
-        <div className="gsea-card gsea-card--section">
-          <h2 className="gsea-card__title">
-            <UserPlus size={18} /> Nueva invitación
-          </h2>
-          <form onSubmit={handleInvite} className="gsea-form">
-            <label className="gsea-label">Correo electrónico</label>
-            <div className="gsea-input-icon-wrap">
-              <Mail size={16} className="gsea-input-icon" />
-              <input
-                className="gsea-input gsea-input--icon"
-                type="email"
-                placeholder="colaborador@empresa.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+        <div className="gsea-team-overview">
+          <article className="gsea-card gsea-team-invite-card">
+            <div className="gsea-team-card-head">
+              <h2 className="gsea-card__title">
+                <UserPlus size={18} />
+                Nueva invitación
+              </h2>
+              <p className="gsea-team-card-copy">
+                Asigna un rol y genera un acceso seguro para un nuevo colaborador.
+              </p>
             </div>
-            <label className="gsea-label">Rol asignado</label>
-            <select
-              className="gsea-select"
-              value={roleId}
-              onChange={(e) => setRoleId(e.target.value)}
-              required
-            >
-              <option value="">Selecciona rol</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.nombre} {r.is_system ? '(sistema)' : ''}
-                </option>
-              ))}
-            </select>
-            {error && <p className="gsea-msg gsea-msg--error">{error}</p>}
-            <button type="submit" className="gsea-btn-primary" disabled={saving}>
-              {saving ? 'Enviando…' : 'Crear invitación'}
-            </button>
-          </form>
 
-          {inviteLink && (
-            <div className="gsea-invite-link-box">
-              <p className="gsea-label">Enlace para el invitado</p>
-              <div className="gsea-invite-link-row">
-                <code className="gsea-invite-link-text">{inviteLink}</code>
-                <button type="button" className="gsea-btn-icon" onClick={copyLink} title="Copiar">
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                </button>
+            <form onSubmit={handleInvite} className="gsea-team-form">
+              <div className="gsea-team-field">
+                <label className="gsea-label">Correo electrónico</label>
+                <div className="gsea-input-icon-wrap">
+                  <Mail size={16} className="gsea-input-icon" />
+                  <input
+                    className="gsea-input gsea-input--icon"
+                    type="email"
+                    placeholder="colaborador@empresa.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="gsea-team-field">
+                <label className="gsea-label">Rol asignado</label>
+                <select
+                  className="gsea-select"
+                  value={roleId}
+                  onChange={(e) => setRoleId(e.target.value)}
+                  required
+                >
+                  <option value="">Selecciona rol</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nombre} {r.is_system ? '(sistema)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="gsea-btn-primary gsea-team-submit"
+                disabled={saving}
+              >
+                {saving ? 'Enviando…' : 'Crear invitación'}
+              </button>
+
+              {error && <p className="gsea-msg gsea-msg--error">{error}</p>}
+            </form>
+
+            {inviteLink && (
+              <div className="gsea-invite-link-box">
+                <p className="gsea-label">Enlace para el invitado</p>
+                <div className="gsea-invite-link-row">
+                  <code className="gsea-invite-link-text">{inviteLink}</code>
+                  <button
+                    type="button"
+                    className="gsea-btn-icon"
+                    onClick={copyLink}
+                    title="Copiar"
+                  >
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </article>
+
+          <aside className="gsea-card gsea-team-summary-card">
+            <span className="gsea-stat-card__label">Invitaciones</span>
+            <p className="gsea-stat-card__value">{list.length}</p>
+
+            <div className="gsea-team-summary-list">
+              <div className="gsea-team-summary-item">
+                <span>Pendientes</span>
+                <strong>{pendingCount}</strong>
+              </div>
+              <div className="gsea-team-summary-item">
+                <span>Aceptadas</span>
+                <strong>{acceptedCount}</strong>
               </div>
             </div>
-          )}
+          </aside>
         </div>
 
-        <div className="gsea-card gsea-card--section gsea-card--stats">
-          <span className="gsea-stat-card__label">Invitaciones</span>
-          <p className="gsea-stat-card__value">{list.length}</p>
-          <p className="gsea-stat-card__hint">
-            {list.filter((i) => !i.used).length} pendientes ·{' '}
-            {list.filter((i) => i.used).length} aceptadas
-          </p>
-        </div>
-      </div>
-
-      <div className="gsea-card gsea-card--section">
-        <h2 className="gsea-card__title">Historial de invitaciones</h2>
-        {loading ? (
-          <p className="gsea-config-loading">Cargando…</p>
-        ) : list.length === 0 ? (
-          <p className="gsea-config-muted">Aún no hay invitaciones. Crea la primera arriba.</p>
-        ) : (
-          <div className="gsea-table-wrap">
-            <table className="gsea-table gsea-table--styled">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Rol</th>
-                  <th>Estado</th>
-                  <th>Expira</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((inv) => (
-                  <tr key={inv.id}>
-                    <td>{inv.email}</td>
-                    <td>{inv.role?.nombre || inv.role_id}</td>
-                    <td>
-                      <span className={`gsea-badge ${inv.used ? 'gsea-badge--muted' : 'gsea-badge--success'}`}>
-                        {inv.used ? 'Aceptada' : 'Pendiente'}
-                      </span>
-                    </td>
-                    <td>
-                      {inv.expires_at
-                        ? new Date(inv.expires_at).toLocaleDateString('es-MX')
-                        : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <article className="gsea-card gsea-team-history-card">
+          <div className="gsea-team-history-head">
+            <h2 className="gsea-card__title">Historial de invitaciones</h2>
+            <p className="gsea-team-card-copy">
+              Consulta el rol, estado y vigencia de cada invitación enviada.
+            </p>
           </div>
-        )}
-      </div>
+
+          {loading ? (
+            <p className="gsea-config-loading">Cargando…</p>
+          ) : list.length === 0 ? (
+            <p className="gsea-config-muted">
+              Aún no hay invitaciones. Crea la primera arriba.
+            </p>
+          ) : (
+            <div className="gsea-table-wrap">
+              <table className="gsea-table gsea-table--styled">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Expira</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((inv) => (
+                    <tr key={inv.id}>
+                      <td data-label="Email">{inv.email}</td>
+                      <td data-label="Rol">{inv.role?.nombre || inv.role_id}</td>
+                      <td data-label="Estado">
+                        <span
+                          className={`gsea-badge ${
+                            inv.used ? 'gsea-badge--muted' : 'gsea-badge--success'
+                          }`}
+                        >
+                          {inv.used ? 'Aceptada' : 'Pendiente'}
+                        </span>
+                      </td>
+                      <td data-label="Expira">
+                        {inv.expires_at
+                          ? new Date(inv.expires_at).toLocaleDateString('es-MX')
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      </section>
     </PageLayout>
   );
 }

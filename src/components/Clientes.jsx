@@ -1,10 +1,3 @@
-/**
- * Cartera de Clientes = contratantes en BD (misma entidad).
- * Backend usa workspace activo (current_workspace_id); no envíes workspace_id salvo que quieras validar coincidencia.
- *
- * Si ves "El workspace enviado no coincide...", actualiza backend (fix query workspace_id=0) o quita workspace_id del front.
- */
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -21,8 +14,10 @@ import {
   FiBriefcase,
 } from 'react-icons/fi';
 import './css/Clientes.css';
+import { readModuleCache, writeModuleCache } from '../utils/moduleCache';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const CACHE_KEY = 'clientes_list';
 
 function authHeaders() {
   const token = localStorage.getItem('token');
@@ -50,55 +45,46 @@ function mapContratanteFromApi(row) {
 
 export default function Clientes() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cached = useMemo(() => readModuleCache(CACHE_KEY), []);
+  const [clients, setClients] = useState(() => (Array.isArray(cached) ? cached : []));
+  const [loading, setLoading] = useState(!cached);
   const [listError, setListError] = useState('');
-  const [workspaceLabel, setWorkspaceLabel] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [modalState, setModalState] = useState({ type: null, data: null });
 
-  const loadMe = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/user`, { headers: authHeaders() });
-      const json = await res.json();
-      if (!res.ok) return;
-      const name = json.current_workspace?.nombre || json.workspaces?.[0]?.nombre || '';
-      setWorkspaceLabel(name);
-      if (json.current_workspace_id) {
-        localStorage.setItem('current_workspace_id', String(json.current_workspace_id));
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const loadContratantes = useCallback(async () => {
-    setLoading(true);
+  const loadContratantes = useCallback(async (signal) => {
+    if (!cached) setLoading(true);
     setListError('');
     try {
-      const res = await fetch(`${API_URL}/contratantes?per_page=100`, { headers: authHeaders() });
+      const res = await fetch(`${API_URL}/contratantes?per_page=100`, {
+        headers: authHeaders(),
+        ...(signal ? { signal } : {}),
+      });
       const json = await res.json();
       if (!res.ok) {
         setListError(json.message || 'No se pudieron cargar los clientes');
-        setClients([]);
+        if (!cached) setClients([]);
         return;
       }
-      const rows = json.data || [];
-      setClients(rows.map(mapContratanteFromApi));
+      const rows = (json.data || []).map(mapContratanteFromApi);
+      setClients(rows);
+      writeModuleCache(CACHE_KEY, rows);
     } catch (e) {
+      if (e?.name === 'AbortError') return;
       setListError('Error de red al cargar clientes');
-      setClients([]);
+      if (!cached) setClients([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cached]);
 
   useEffect(() => {
-    loadMe();
-    loadContratantes();
-  }, [loadMe, loadContratantes]);
+    const controller = new AbortController();
+    loadContratantes(controller.signal);
+    return () => controller.abort();
+  }, [loadContratantes]);
 
   const openModal = (type, data = null) => setModalState({ type, data });
   const closeModal = () => setModalState({ type: null, data: null });
@@ -117,10 +103,18 @@ export default function Clientes() {
   }, [clients, searchTerm]);
 
   const totalPages = Math.max(1, Math.ceil(filteredClients.length / itemsPerPage));
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
   const currentItems = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredClients.slice(start, start + itemsPerPage);
-  }, [filteredClients, currentPage]);
+  }, [filteredClients, currentPage, itemsPerPage]);
 
   return (
     <div className="clientes-container">
@@ -135,14 +129,7 @@ export default function Clientes() {
           <div className="clientes-page-header">
             <div>
               <h1 className="clientes-page-title">Cartera de Clientes</h1>
-              <p className="clientes-page-subtitle">      
-                {workspaceLabel && (
-                  <span className="clientes-workspace-badge" style={{ marginLeft: '0.5rem', fontWeight: 600 }}>
-                    <FiBriefcase style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                    {workspaceLabel}
-                  </span>
-                )}
-              </p>
+              
             </div>
             <motion.button
               type="button"
@@ -201,7 +188,6 @@ export default function Clientes() {
                     >
                       <td>
                         <div className="clientes-client-cell">
-                          <div className="clientes-client-avatar">{client.nombre.charAt(0)}</div>
                           <div className="clientes-client-info">
                             <span className="clientes-client-fullname">{client.nombre}</span>
                             <span className="clientes-client-folio">{client.folioCliente}</span>
@@ -245,25 +231,56 @@ export default function Clientes() {
                 Mostrando <span className="clientes-pagination-highlight">{currentItems.length}</span> de{' '}
                 <span className="clientes-pagination-highlight">{filteredClients.length}</span> registros
               </div>
-              <div className="clientes-pagination-controls">
-                <div className="clientes-pagination-buttons">
+
+              <div className="clientes-pagination-right">
+                <label className="clientes-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  >
+                    {[5, 10, 20, 50].map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="clientes-pagination-controls">
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage((p) => p - 1)}
                     className="clientes-pagination-prev"
+                    aria-label="Página anterior"
                   >
                     <FiChevronLeft />
                   </motion.button>
+
+                  <label className="clientes-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    >
+                      {Array.from({ length: totalPages }, (_, index) => (
+                        <option key={index + 1} value={index + 1}>
+                          {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </label>
+
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
                     disabled={currentPage >= totalPages}
                     onClick={() => setCurrentPage((p) => p + 1)}
                     className="clientes-pagination-next"
+                    aria-label="Página siguiente"
                   >
                     <FiChevronRight />
                   </motion.button>
@@ -276,7 +293,7 @@ export default function Clientes() {
 
       <AnimatePresence>
         {modalState.type && (
-          <div className="clientes-modal-overlay">
+          <div className="clientes-modal-overlay clientes-drawer-overlay">
             {modalState.type === 'agregar' && (
               <FormularioCliente
                 title="Nuevo Cliente"
@@ -355,10 +372,11 @@ function FormularioCliente({ title, onClose, onSaved, initial }) {
 
   return (
     <motion.div
-      initial={{ scale: 0.92, opacity: 0, y: 16 }}
-      animate={{ scale: 1, opacity: 1, y: 0 }}
-      exit={{ scale: 0.92, opacity: 0, y: 16 }}
-      className="clientes-modal-panel clientes-modal-form-panel"
+      initial={{ x: 56, opacity: 0.96 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: 56, opacity: 0.96 }}
+      transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+      className="clientes-modal-panel clientes-modal-form-panel clientes-drawer-panel"
     >
       <div className="clientes-modal-header">
         <h2 className="clientes-modal-title">{title}</h2>
@@ -372,9 +390,7 @@ function FormularioCliente({ title, onClose, onSaved, initial }) {
 
         <div className="clientes-form-section">
           <h3 className="clientes-form-section-title">Datos del contratante</h3>
-          <p className="clientes-page-subtitle" style={{ marginTop: 0 }}>
-            En base de datos la tabla es <strong>contratantes</strong> (es tu “cliente”).
-          </p>
+          
           <div className="clientes-form-grid">
             <div className="clientes-form-group">
               <label>Nombre o razón social *</label>

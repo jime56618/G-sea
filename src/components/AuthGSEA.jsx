@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './css/AuthGSEA.css';
+import './css/LegalAccount.css';
 import logo from '../assets/images/logo-gsea.png';
-import { API_URL, TOKEN_KEY } from '../utils/constants';
-import { persistWorkspaceFromUser } from '../utils/workspaceStorage';
+import { API_URL } from '../utils/constants';
+import { useAuth } from '../context/AuthContext';
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
@@ -30,14 +31,11 @@ export default function AuthGSEA() {
   const [regPassword, setRegPassword] = useState('');
   const [regPasswordConfirmation, setRegPasswordConfirmation] = useState('');
   const [regWorkspace, setRegWorkspace] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
-
-  const persistLogin = (data) => {
-    localStorage.setItem(TOKEN_KEY, data.token);
-    persistWorkspaceFromUser(data);
-  };
+  const { loginWithResponse } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -62,8 +60,8 @@ export default function AuthGSEA() {
         return;
       }
 
-      persistLogin(data);
-      navigate('/dashboard');
+      loginWithResponse(data);
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error(error);
       setErrorMsg('Error de conexión con el servidor');
@@ -77,6 +75,12 @@ export default function AuthGSEA() {
     setLoading(true);
     setErrorMsg('');
 
+    if (!acceptedTerms) {
+      setErrorMsg('Debes aceptar los Términos y el Aviso de privacidad.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/register`, {
         method: 'POST',
@@ -88,6 +92,7 @@ export default function AuthGSEA() {
           password_confirmation: regPasswordConfirmation,
           workspace: regWorkspace,
           device_name: 'web',
+          accepted_terms: true,
         }),
       });
 
@@ -98,8 +103,8 @@ export default function AuthGSEA() {
         return;
       }
 
-      persistLogin(data);
-      navigate('/dashboard');
+      loginWithResponse(data);
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error(error);
       setErrorMsg('Error de conexión con el servidor');
@@ -261,11 +266,34 @@ export default function AuthGSEA() {
                     required
                   />
                 </div>
+
+                <label className="gsea-auth-accept">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  />
+                  <span>
+                    Acepto los{' '}
+                    <Link to="/terminos" target="_blank" rel="noreferrer">
+                      Términos y condiciones
+                    </Link>{' '}
+                    y el{' '}
+                    <Link to="/aviso-privacidad" target="_blank" rel="noreferrer">
+                      Aviso de privacidad
+                    </Link>
+                    .
+                  </span>
+                </label>
               </div>
 
               {errorMsg && <p className="gsea-auth-error">{errorMsg}</p>}
 
-              <button type="submit" className="gsea-auth-btn-primary" disabled={loading}>
+              <button
+                type="submit"
+                className="gsea-auth-btn-primary"
+                disabled={loading || !acceptedTerms}
+              >
                 {loading ? 'Cargando...' : 'Crear cuenta'}
               </button>
             </form>

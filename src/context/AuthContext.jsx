@@ -1,6 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch, setWorkspaceLockedHandler } from '../utils/apiClient';
+import { apiFetch, ApiError, setWorkspaceLockedHandler } from '../utils/apiClient';
 import { TOKEN_KEY } from '../utils/constants';
 import {
   clearAuthStorage,
@@ -15,7 +15,12 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const [session, setSession] = useState(() => getAuthSession());
-  const [loading, setLoading] = useState(true);
+  // Solo bloquear UI si hay token pero aún no hay sesión en caché
+  const [loading, setLoading] = useState(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return Boolean(token) && !getAuthSession();
+  });
+  const refreshingRef = useRef(false);
 
   const applySession = useCallback((payload) => {
     const next = persistWorkspaceFromUser(payload);
@@ -30,20 +35,35 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return null;
     }
+
+    if (refreshingRef.current) return getAuthSession();
+    refreshingRef.current = true;
+
+    const hadCache = Boolean(getAuthSession());
+    if (!hadCache) setLoading(true);
+
     try {
       const data = await apiFetch('/user', { method: 'GET' });
       return applySession(data);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearAuthStorage();
+        setSession(null);
+        return null;
+      }
       return getAuthSession();
     } finally {
+      refreshingRef.current = false;
       setLoading(false);
     }
   }, [applySession]);
 
   useEffect(() => {
     setWorkspaceLockedHandler(() => navigate('/billing-locked', { replace: true }));
+    // Con caché: entrar ya; refrescar /user en segundo plano
     refresh();
-  }, [navigate, refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
+  }, []);
 
   const logout = useCallback(() => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -52,7 +72,8 @@ export function AuthProvider({ children }) {
     }
     clearAuthStorage();
     setSession(null);
-    navigate('/', { replace: true });
+    setLoading(false);
+    navigate('/landing', { replace: true });
   }, [navigate]);
 
   const switchWorkspace = useCallback(
@@ -69,7 +90,9 @@ export function AuthProvider({ children }) {
   const loginWithResponse = useCallback(
     (data) => {
       if (data?.token) localStorage.setItem(TOKEN_KEY, data.token);
-      return applySession(data);
+      const next = applySession(data);
+      setLoading(false);
+      return next;
     },
     [applySession]
   );

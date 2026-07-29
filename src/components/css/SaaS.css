@@ -592,3 +592,405 @@
   font-size: 0.8rem;
   max-width: 200px;
 }
+
+
+/* ==========================================================
+   REDISEÑO — EQUIPO E INVITACIONES
+   Mantiene rutas, lógica y colores base de GSEA.
+   ========================================================== */
+
+.gsea-team-page {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0;
+  padding: 30px 34px 42px;
+  box-sizing: border-box;
+}
+
+.gsea-team-page .gsea-config-page-header,
+.gsea-team-page .gsea-config-header {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.gsea-team-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: stretch;
+  margin-top: 22px;
+}
+
+.gsea-team-page .gsea-card {
+  border-radius: 18px;
+  border: 1px solid #e5eaf1;
+  box-shadow: 0 8px 24px rgba(9, 50, 74, 0.05);
+}
+
+.gsea-team-invite-card {
+  padding: 26px 28px;
+}
+
+.gsea-team-card-head,
+.gsea-team-history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gsea-team-page .gsea-card__title {
+  color: #001f3f;
+  font-size: 1rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.gsea-team-page .gsea-card__title svg {
+  color: #1e488f;
+}
+
+.gsea-team-card-copy {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.gsea-team-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.7fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin-top: 24px;
+}
+
+.gsea-team-field {
+  min-width: 0;
+}
+
+.gsea-team-page .gsea-label {
+  margin-bottom: 7px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.gsea-team-page .gsea-input-icon-wrap {
+  margin-bottom: 0;
+}
+
+.gsea-team-page .gsea-input,
+.gsea-team-page .gsea-select {
+  height: 48px;
+  margin-bottom: 0;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #fff;
+  color: #001f3f;
+  font-size: 0.86rem;
+}
+
+.gsea-team-page .gsea-input:focus,
+.gsea-team-page .gsea-select:focus {
+  outline: none;
+  border-color: #1e488f;
+  box-shadow: 0 0 0 3px rgba(30, 72, 143, 0.08);
+}
+
+.gsea-team-submit {
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.gsea-team-summary-card {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.gsea-team-summary-card .gsea-stat-card__value {
+  margin-top: 4px;
+  font-size: 2.4rem;
+}
+
+.gsea-team-summary-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.gsea-team-summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e5eaf1;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.gsea-team-summary-item strong {
+  color: #001f3f;
+  font-size: 0.94rem;
+}
+
+.gsea-team-history-card {
+  padding: 24px 28px 28px;
+  margin-top: 18px;
+}
+
+.gsea-team-history-head {
+  margin-bottom: 18px;
+}
+
+.gsea-team-page .gsea-table-wrap {
+  border-color: #e5eaf1;
+  border-radius: 12px;
+}
+
+.gsea-team-page .gsea-table th {
+  padding: 13px 16px;
+  background: #f8fafc;
+}
+
+.gsea-team-page .gsea-table td {
+  padding: 14px 16px;
+  color: #334155;
+}
+
+.gsea-team-page .gsea-badge {
+  margin-top: 0;
+}
+
+.gsea-team-page .gsea-invite-link-box {
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.gsea-team-page .gsea-invite-link-text {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .gsea-team-page {
+    max-width: none;
+    padding: 26px 24px 36px;
+  }
+
+  .gsea-team-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gsea-team-submit {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+}
+
+@media (max-width: 820px) {
+  .gsea-team-page {
+    padding: 22px 18px 32px;
+  }
+
+  .gsea-team-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .gsea-team-summary-card {
+    min-height: 190px;
+  }
+}
+
+@media (max-width: 640px) {
+  .gsea-team-page {
+    padding: 18px 14px 28px;
+  }
+
+  .gsea-team-invite-card,
+  .gsea-team-history-card,
+  .gsea-team-summary-card {
+    padding: 20px 18px;
+  }
+
+  .gsea-team-form {
+    grid-template-columns: 1fr;
+  }
+
+  .gsea-team-submit {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .gsea-invite-link-row {
+    flex-direction: column;
+  }
+
+  .gsea-team-page .gsea-btn-icon {
+    width: 100%;
+    min-height: 42px;
+  }
+}
+
+
+/* ==========================================================
+   CORRECCIÓN DE ALINEACIÓN — EVITA DOBLE MARGEN DE SIDEBAR
+   ========================================================== */
+
+/*
+  PageLayout ya se encuentra dentro del shell desplazado por la sidebar.
+  Estas reglas evitan que este módulo vuelva a sumar 280/88 px.
+*/
+body:has(.gsea-team-page) .gsea-app-main--expanded,
+body:has(.gsea-team-page) .gsea-app-main--collapsed {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+/* El contenedor padre deja de centrar o limitar este módulo */
+body:has(.gsea-team-page) .gsea-config-page,
+body:has(.gsea-team-page) main,
+body:has(.gsea-team-page) .gsea-app-main {
+  max-width: none !important;
+}
+
+body:has(.gsea-team-page) .gsea-config-page {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Contenido alineado cerca de la sidebar */
+.gsea-team-page {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-left: 30px !important;
+  padding-right: 30px !important;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+
+/* Evita que el encabezado conserve un ancho centrado heredado */
+.gsea-team-page > .gsea-config-page-header,
+.gsea-team-page > .gsea-config-header,
+.gsea-team-page > header {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* El contenido usa todo el espacio disponible sin perder proporción */
+.gsea-team-overview,
+.gsea-team-history-card {
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 820px) {
+  body:has(.gsea-team-page) .gsea-app-main--expanded,
+  body:has(.gsea-team-page) .gsea-app-main--collapsed {
+    margin-left: 0 !important;
+  }
+
+  .gsea-team-page {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .gsea-team-page {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+}
+
+/* ==========================================================
+   CORRECCIÓN DEFINITIVA — CENTRADO DENTRO DEL ÁREA ÚTIL
+   La sidebar conserva su espacio. El contenido se centra
+   únicamente dentro del área restante de la pantalla.
+   ========================================================== */
+
+/* Restaurar el desplazamiento real del shell según la sidebar */
+body:has(.gsea-team-page) .gsea-app-main--expanded {
+  margin-left: 280px !important;
+  width: calc(100% - 280px) !important;
+}
+
+body:has(.gsea-team-page) .gsea-app-main--collapsed {
+  margin-left: 88px !important;
+  width: calc(100% - 88px) !important;
+}
+
+/* El PageLayout ocupa el área útil, no toda la ventana */
+body:has(.gsea-team-page) .gsea-app-main,
+body:has(.gsea-team-page) .gsea-config-page,
+body:has(.gsea-team-page) main {
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Centrar el módulo dentro del espacio que queda después de la sidebar */
+.gsea-team-page {
+  width: calc(100% - 48px) !important;
+  max-width: 1120px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding: 30px 0 42px !important;
+  box-sizing: border-box;
+}
+
+/* Encabezado y tarjetas siguen exactamente el mismo eje */
+.gsea-team-page > .gsea-config-page-header,
+.gsea-team-page > .gsea-config-header,
+.gsea-team-page > header,
+.gsea-team-overview,
+.gsea-team-history-card {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Cuando la sidebar cambia de tamaño, el contenido se recentra solo */
+@media (max-width: 1180px) {
+  .gsea-team-page {
+    width: calc(100% - 36px) !important;
+    max-width: 1040px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  body:has(.gsea-team-page) .gsea-app-main--expanded,
+  body:has(.gsea-team-page) .gsea-app-main--collapsed {
+    margin-left: 72px !important;
+    width: calc(100% - 72px) !important;
+  }
+
+  .gsea-team-page {
+    width: calc(100% - 28px) !important;
+    max-width: none !important;
+    padding-top: 24px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body:has(.gsea-team-page) .gsea-app-main--expanded,
+  body:has(.gsea-team-page) .gsea-app-main--collapsed {
+    margin-left: 64px !important;
+    width: calc(100% - 64px) !important;
+  }
+
+  .gsea-team-page {
+    width: calc(100% - 20px) !important;
+    padding-top: 18px !important;
+    padding-bottom: 28px !important;
+  }
+}

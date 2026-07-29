@@ -1,21 +1,5 @@
-/**
- * Seguimiento de Pólizas — integración con Laravel API.
- *
- * Ajusta imports a tu estructura, ej:
- *   import Sidebar from '../components/Sidebar';
- *   import Navbar from '../components/Navbar';
- *   import './css/SeguimientoPolizas.css';
- *
- * Requiere: token Sanctum, workspace activo (current_workspace_id).
- *
- * Backend POST /api/polizas exige: contratante_id, aseguradora_id, ramo_id, subramo_id,
- * numero_poliza, inicio_vigencia, fin_vigencia; opcional agente_id (id de agente_workspaces),
- * fecha_emision, primas, vehiculo, cobranza (frecuencia_cobro: unico|mensual|trimestral,
- * monto_cuota, telefono_notificacion). Las cuotas se generan en cobranza_cuotas al guardar.
- * Calendario: GET /api/calendar/cobranza-cuotas?year=2026&month=4 (o from, to).
- */
-
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -38,8 +22,11 @@ import {
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import './css/SeguimientoPolizas.css';
+import { readModuleCache, writeModuleCache } from '../utils/moduleCache';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const POLIZAS_CACHE_KEY = 'polizas_list';
+const CATALOGOS_CACHE_KEY = 'polizas_catalogos';
 
 function authHeaders() {
   const token = localStorage.getItem('token');
@@ -122,30 +109,87 @@ const emptyForm = () => ({
   telefono_notificacion: '',
 });
 
+const IVA_RATE = 0.16;
+
+function roundMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+function divisorFrecuencia(frecuencia) {
+  switch (String(frecuencia || '').toLowerCase()) {
+    case 'mensual':
+      return 12;
+    case 'trimestral':
+      return 4;
+    case 'semestral':
+      return 2;
+    case 'anual':
+    case 'unico':
+    default:
+      return 1;
+  }
+}
+
+/** Recalcula IVA, prima total y monto cuota a partir de prima neta + frecuencia. */
+function applyPremiumCalc(prev, patch = {}) {
+  const next = { ...prev, ...patch };
+  const netaRaw = next.prima_neta;
+  const neta = netaRaw === '' || netaRaw == null ? NaN : Number(netaRaw);
+
+  if (!Number.isFinite(neta) || neta < 0) {
+    return {
+      ...next,
+      iva: '',
+      prima_total: '',
+      monto_cuota: '',
+    };
+  }
+
+  const iva = neta * IVA_RATE;
+  const total = neta + iva;
+  const divisor = divisorFrecuencia(next.frecuencia_cobro);
+  const cuota = total / divisor;
+
+  return {
+    ...next,
+    iva: roundMoney(iva),
+    prima_total: roundMoney(total),
+    monto_cuota: roundMoney(cuota),
+  };
+}
+
 const SeguimientoPolizas = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [polizas, setPolizas] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedPolizas = useMemo(() => readModuleCache(POLIZAS_CACHE_KEY), []);
+  const [polizas, setPolizas] = useState(() => (Array.isArray(cachedPolizas) ? cachedPolizas : []));
+  const [loading, setLoading] = useState(!cachedPolizas);
   const [listError, setListError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstatus, setFilterEstatus] = useState('Todos');
   const [modalType, setModalType] = useState(null);
   const [selectedPoliza, setSelectedPoliza] = useState(null);
+  const [successMsg, setSuccessMsg] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [activeMenuId, setActiveMenuId] = useState(null);
   const menuRef = useRef(null);
 
-  const [catalogos, setCatalogos] = useState({
-    contratantes: [],
-    aseguradoras: [],
-    ramos: [],
-    subramos: [],
-    agentesWorkspace: [],
-  });
-
-  const itemsPerPage = 5;
+  const cachedCatalogos = useMemo(() => readModuleCache(CATALOGOS_CACHE_KEY), []);
+  const [catalogos, setCatalogos] = useState(
+    () =>
+      cachedCatalogos || {
+        contratantes: [],
+        aseguradoras: [],
+        ramos: [],
+        subramos: [],
+        agentesWorkspace: [],
+      }
+  );
+  const [catalogosReady, setCatalogosReady] = useState(Boolean(cachedCatalogos?.contratantes));
 
   const loadCatalogos = useCallback(async () => {
     const [contratantes, aseguradoras, ramos, subramos, agentesWorkspace] = await Promise.all([
@@ -155,31 +199,37 @@ const SeguimientoPolizas = () => {
       fetchJson(`${API_URL}/subramos?per_page=500`).then((j) => j.data || []),
       fetchJson(`${API_URL}/agentes_workspace?per_page=500`).then((j) => j.data || []),
     ]);
-    setCatalogos({ contratantes, aseguradoras, ramos, subramos, agentesWorkspace });
+    const next = { contratantes, aseguradoras, ramos, subramos, agentesWorkspace };
+    setCatalogos(next);
+    writeModuleCache(CATALOGOS_CACHE_KEY, next);
+    setCatalogosReady(true);
   }, []);
 
   const loadPolizas = useCallback(async () => {
-    setLoading(true);
+    if (!cachedPolizas) setLoading(true);
     setListError('');
     try {
       const json = await fetchJson(`${API_URL}/polizas?per_page=200`);
-      const rows = json.data || [];
-      setPolizas(rows.map(mapPolizaFromApi));
+      const rows = (json.data || []).map(mapPolizaFromApi);
+      setPolizas(rows);
+      writeModuleCache(POLIZAS_CACHE_KEY, rows);
     } catch (e) {
       setListError(e.message || 'Error al cargar pólizas');
-      setPolizas([]);
+      if (!cachedPolizas) setPolizas([]);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadCatalogos().catch(() => {});
-  }, [loadCatalogos]);
+  }, [cachedPolizas]);
 
   useEffect(() => {
     loadPolizas();
   }, [loadPolizas]);
+
+  useEffect(() => {
+    if (!modalType || modalType === 'delete') return;
+    if (catalogosReady && catalogos.contratantes?.length) return;
+    loadCatalogos().catch(() => {});
+  }, [modalType, catalogosReady, catalogos.contratantes?.length, loadCatalogos]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -208,11 +258,15 @@ const SeguimientoPolizas = () => {
   const paginatedPolizas = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredPolizas.slice(start, start + itemsPerPage);
-  }, [filteredPolizas, currentPage]);
+  }, [filteredPolizas, currentPage, itemsPerPage]);
 
   useEffect(() => {
     setCurrentPage((prev) => Math.min(prev, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   const getStatusConfig = (estatus) => {
     return estatus === 'Vigente'
@@ -238,6 +292,12 @@ const SeguimientoPolizas = () => {
     setActiveMenuId((prev) => (prev === polizaId ? null : polizaId));
   };
 
+  const showSuccess = (message) => {
+    setSuccessMsg(message);
+    window.clearTimeout(showSuccess._t);
+    showSuccess._t = window.setTimeout(() => setSuccessMsg(''), 3500);
+  };
+
   const handleDeleteConfirm = async () => {
     if (!selectedPoliza?.id) return;
     try {
@@ -253,7 +313,8 @@ const SeguimientoPolizas = () => {
       setModalType(null);
       setSelectedPoliza(null);
       setActiveMenuId(null);
-      loadPolizas();
+      await loadPolizas();
+      showSuccess('Póliza eliminada correctamente.');
     } catch (e) {
       alert(e.message || 'No se pudo eliminar');
     }
@@ -271,6 +332,11 @@ const SeguimientoPolizas = () => {
         <Navbar />
 
         <main className="polizas-main">
+          {successMsg && (
+            <div className="polizas-toast-success" role="status">
+              {successMsg}
+            </div>
+          )}
           <div className="polizas-header">
             <div className="polizas-header-left">
               <h1 className="polizas-title">Seguimiento de Pólizas</h1>
@@ -440,32 +506,59 @@ const SeguimientoPolizas = () => {
                 <span className="polizas-pagination-highlight">{filteredPolizas.length}</span> registros
               </div>
 
-              <div className="polizas-pagination-right polizas-pagination-right-inline">
-                <button
-                  type="button"
-                  className="polizas-pagination-arrowSolo"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  aria-label="Página anterior"
-                  title="Anterior"
-                >
-                  <ChevronLeft size={16} />
-                </button>
+              <div className="polizas-pagination-options">
+                <label className="polizas-page-size">
+                  <span>Registros por página</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  >
+                    {[5, 10, 20, 50].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                <span className="polizas-pagination-pageLabel polizas-pagination-pageLabel-inline">
-                  Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-                </span>
+                <div className="polizas-pagination-right polizas-pagination-right-inline">
+                  <button
+                    type="button"
+                    className="polizas-pagination-arrowSolo"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    aria-label="Página anterior"
+                    title="Anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  className="polizas-pagination-arrowSolo"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages || filteredPolizas.length === 0}
-                  aria-label="Página siguiente"
-                  title="Siguiente"
-                >
-                  <ChevronRight size={16} />
-                </button>
+                  <label className="polizas-page-picker">
+                    <span>Página</span>
+                    <select
+                      value={currentPage}
+                      onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    >
+                      {Array.from({ length: totalPages }, (_, index) => (
+                        <option key={index + 1} value={index + 1}>
+                          {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="polizas-pagination-arrowSolo"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages || filteredPolizas.length === 0}
+                    aria-label="Página siguiente"
+                    title="Siguiente"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -492,10 +585,15 @@ const SeguimientoPolizas = () => {
             setModalType(null);
             setSelectedPoliza(null);
           }}
-          onSaved={() => {
+          onSaved={(kind) => {
             setModalType(null);
             setSelectedPoliza(null);
             loadPolizas();
+            showSuccess(
+              kind === 'edit'
+                ? 'Póliza actualizada correctamente.'
+                : 'Póliza guardada correctamente.'
+            );
           }}
           onDeleteConfirm={handleDeleteConfirm}
         />
@@ -547,6 +645,7 @@ function agentesFiltradosPorAseguradora(agentesWorkspace, aseguradoraId) {
 
 const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm }) => {
   const isEdit = type === 'edit' && data?.raw;
+  const isDrawer = type === 'add' || type === 'edit';
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [formData, setFormData] = useState(() => emptyForm());
@@ -554,24 +653,26 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
   useEffect(() => {
     if (type === 'edit' && data?.raw) {
       const p = data.raw;
-      setFormData({
-        contratante_id: String(p.contratante_id ?? ''),
-        aseguradora_id: String(p.aseguradora_id ?? ''),
-        ramo_id: String(p.ramo_id ?? ''),
-        subramo_id: String(p.subramo_id ?? ''),
-        agente_id: p.agente_id ? String(p.agente_id) : '',
-        numero_poliza: p.numero_poliza || '',
-        fecha_emision: p.fecha_emision?.slice(0, 10) || '',
-        inicio_vigencia: p.inicio_vigencia?.slice(0, 10) || '',
-        fin_vigencia: p.fin_vigencia?.slice(0, 10) || '',
-        prima_neta: p.prima_neta != null ? String(p.prima_neta) : '',
-        iva: p.iva != null ? String(p.iva) : '',
-        prima_total: p.prima_total != null ? String(p.prima_total) : '',
-        moneda: p.moneda || 'MXN',
-        frecuencia_cobro: p.frecuencia_cobro || 'unico',
-        monto_cuota: p.monto_cuota != null ? String(p.monto_cuota) : '',
-        telefono_notificacion: p.telefono_notificacion || '',
-      });
+      setFormData(
+        applyPremiumCalc({
+          contratante_id: String(p.contratante_id ?? ''),
+          aseguradora_id: String(p.aseguradora_id ?? ''),
+          ramo_id: String(p.ramo_id ?? ''),
+          subramo_id: String(p.subramo_id ?? ''),
+          agente_id: p.agente_id ? String(p.agente_id) : '',
+          numero_poliza: p.numero_poliza || '',
+          fecha_emision: p.fecha_emision?.slice(0, 10) || '',
+          inicio_vigencia: p.inicio_vigencia?.slice(0, 10) || '',
+          fin_vigencia: p.fin_vigencia?.slice(0, 10) || '',
+          prima_neta: p.prima_neta != null ? String(p.prima_neta) : '',
+          iva: p.iva != null ? String(p.iva) : '',
+          prima_total: p.prima_total != null ? String(p.prima_total) : '',
+          moneda: p.moneda || 'MXN',
+          frecuencia_cobro: p.frecuencia_cobro || 'unico',
+          monto_cuota: p.monto_cuota != null ? String(p.monto_cuota) : '',
+          telefono_notificacion: p.telefono_notificacion || '',
+        })
+      );
     } else if (type === 'add') {
       setFormData(emptyForm());
     }
@@ -628,7 +729,7 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
           body: JSON.stringify(payload),
         });
       }
-      onSaved();
+      onSaved(type === 'edit' ? 'edit' : 'add');
     } catch (ex) {
       setErr(ex.message || 'Error al guardar');
     } finally {
@@ -652,8 +753,22 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
   };
 
   return (
-    <div className="polizas-modal-overlay">
-      <div className={`polizas-modal ${type === 'delete' ? 'polizas-modal-delete' : ''}`}>
+    <motion.div
+      initial={isDrawer ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
+      exit={isDrawer ? { opacity: 0 } : undefined}
+      transition={isDrawer ? { duration: 0.22, ease: 'easeOut' } : undefined}
+      className={`polizas-modal-overlay ${isDrawer ? 'polizas-drawer-overlay' : ''}`}
+    >
+      <motion.div
+        initial={isDrawer ? { x: 56, opacity: 0.96 } : false}
+        animate={isDrawer ? { x: 0, opacity: 1 } : undefined}
+        exit={isDrawer ? { x: 56, opacity: 0.96 } : undefined}
+        transition={isDrawer ? { duration: 0.34, ease: [0.22, 1, 0.36, 1] } : undefined}
+        className={`polizas-modal ${type === 'delete' ? 'polizas-modal-delete' : ''} ${
+          isDrawer ? 'polizas-drawer-panel' : ''
+        }`}
+      >
         <div className="polizas-modal-header">
           <h3 className="polizas-modal-title">{getModalTitle()}</h3>
           <button type="button" onClick={onClose} className="polizas-modal-close">
@@ -848,17 +963,20 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                     step="0.01"
                     min="0"
                     value={formData.prima_neta}
-                    onChange={(e) => setFormData({ ...formData, prima_neta: e.target.value })}
+                    onChange={(e) =>
+                      setFormData((prev) => applyPremiumCalc(prev, { prima_neta: e.target.value }))
+                    }
                   />
                 </div>
                 <div className="polizas-form-group">
-                  <label>IVA</label>
+                  <label>IVA (16%)</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     value={formData.iva}
-                    onChange={(e) => setFormData({ ...formData, iva: e.target.value })}
+                    readOnly
+                    title="Se calcula automáticamente: prima neta × 16%"
                   />
                 </div>
                 <div className="polizas-form-group">
@@ -868,7 +986,8 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                     step="0.01"
                     min="0"
                     value={formData.prima_total}
-                    onChange={(e) => setFormData({ ...formData, prima_total: e.target.value })}
+                    readOnly
+                    title="Se calcula automáticamente: prima neta + IVA"
                   />
                 </div>
               </div>
@@ -878,7 +997,11 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                   <label>Frecuencia de cobro</label>
                   <select
                     value={formData.frecuencia_cobro}
-                    onChange={(e) => setFormData({ ...formData, frecuencia_cobro: e.target.value })}
+                    onChange={(e) =>
+                      setFormData((prev) =>
+                        applyPremiumCalc(prev, { frecuencia_cobro: e.target.value })
+                      )
+                    }
                   >
                     <option value="unico">Único</option>
                     <option value="mensual">Mensual</option>
@@ -892,8 +1015,9 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                     step="0.01"
                     min="0"
                     value={formData.monto_cuota}
-                    onChange={(e) => setFormData({ ...formData, monto_cuota: e.target.value })}
-                    placeholder="Si vacío y hay prima total, se usa prima total"
+                    readOnly
+                    placeholder="Prima total ÷ frecuencia"
+                    title="Se calcula automáticamente según frecuencia"
                   />
                 </div>
                 <div className="polizas-form-group">
@@ -919,8 +1043,8 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
             </form>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
