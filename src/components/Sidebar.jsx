@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, User, FileText,
   Calendar, DollarSign, GraduationCap,
   ClipboardList, LogOut, Settings, ShieldCheck, Database, UserCircle,
-  Search, ChevronLeft, ChevronRight,
+  Search, ChevronLeft, ChevronRight, BarChart3,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -26,6 +26,7 @@ const PATH_ICONS = {
   "/seguimiento-cobranza": DollarSign,
   "/capacitacion": GraduationCap,
   "/calendario": Calendar,
+  "/reportes": BarChart3,
   "/configuracion/perfil": UserCircle,
   "/configuracion/seguridad": ShieldCheck,
   "/configuracion/mis-datos": Database,

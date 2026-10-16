@@ -25,6 +25,7 @@ import ProfileSettings from './components/ProfileSettings';
 import MyDataSettings from './components/MyDataSettings';
 import SecuritySettings from './components/SecuritySettings';
 import { TerminosPage, AvisoPrivacidadPage } from './components/LegalPages';
+import Reportes from './components/Reportes';
 
 import './components/css/SaaS.css';
 
@@ -40,6 +41,8 @@ export default function App() {
         <Route path="/aviso-privacidad" element={<AvisoPrivacidadPage />} />
         <Route path="/invitacion/:token" element={<AcceptInvitation />} />
         <Route path="/billing-locked" element={<BillingLocked />} />
+        {/* Público: demo Metabase (sin login) */}
+        <Route path="/reportes" element={<Reportes />} />
 
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/agentes" element={<ProtectedRoute><Agentes /></ProtectedRoute>} />

@@ -31,6 +31,7 @@ export const MENU_ITEMS = [
   { path: '/seguimiento-cobranza', label: 'Seguimiento de Cobranza', permission: PERMISSIONS.COBRANZA_VIEW, group: 'main' },
   { path: '/calendario', label: 'Calendario', permission: PERMISSIONS.CALENDAR_VIEW, group: 'main' },
   { path: '/capacitacion', label: 'Capacitación', permission: PERMISSIONS.DASHBOARD_VIEW, group: 'main' },
+  { path: '/reportes', label: 'Reportes', permission: null, group: 'main' },
 ];
 
 export const ADMIN_MENU_ITEMS = [
