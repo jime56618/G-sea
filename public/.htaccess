@@ -1,0 +1,12 @@
+# SPA (React Router): cualquier ruta → index.html
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # No reescribir archivos ni carpetas reales
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Todo lo demás a index.html (ej. /reportes)
+  RewriteRule ^ index.html [L]
+</IfModule>
