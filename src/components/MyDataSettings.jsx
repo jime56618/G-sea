@@ -18,7 +18,8 @@ export default function MyDataSettings() {
 
   return (
     <PageLayout>
-      <ConfigPageHeader
+      <section className="gsea-config-page">
+        <ConfigPageHeader
         icon={Database}
         title="Mis datos"
         subtitle="Consulta, rectifica o solicita la eliminación de tu información personal (vista temporal)."
@@ -107,6 +108,7 @@ export default function MyDataSettings() {
           Solicitar eliminación
         </button>
       </div>
+      </section>
     </PageLayout>
   );
 }

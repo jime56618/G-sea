@@ -1,3 +1,5 @@
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
@@ -167,8 +169,31 @@ const SeguimientoPolizas = () => {
   const [loading, setLoading] = useState(!cachedPolizas);
   const [listError, setListError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
   const [filterEstatus, setFilterEstatus] = useState('Todos');
-  const [modalType, setModalType] = useState(null);
+  const [dashboardAlertFilter, setDashboardAlertFilter] = useState(() => (
+    location.state?.alertFilter === 'vencidas' ? 'vencidas' : null
+  ));
+  const { can } = useAuth();
+  useEffect(() => {
+    if (location.state?.dashboardCreate) {
+      const remainingState = { ...location.state };
+      delete remainingState.dashboardCreate;
+      navigate(location.pathname + location.search + location.hash, { replace: true, state: remainingState });
+    }
+  }, [location, navigate]);
+
+  useEffect(() => {
+    if (location.state?.alertFilter !== 'vencidas') return;
+    setFilterEstatus('No Vigente');
+    setDashboardAlertFilter('vencidas');
+    navigate(location.pathname + location.search + location.hash, {
+      replace: true,
+      state: null,
+    });
+  }, [location, navigate]);
+  const [modalType, setModalType] = useState(() => location.state?.dashboardCreate && can('polizas.manage') && can('polizas.view') ? 'add' : null);
   const [selectedPoliza, setSelectedPoliza] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -248,10 +273,12 @@ const SeguimientoPolizas = () => {
         p.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.contratante.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.aseguradora.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterEstatus === 'Todos' || p.estatus === filterEstatus;
+      const matchesFilter = dashboardAlertFilter === 'vencidas'
+        ? Boolean(p.fin_vigencia && new Date(`${p.fin_vigencia}T00:00:00`) < new Date(new Date().toDateString()))
+        : filterEstatus === 'Todos' || p.estatus === filterEstatus;
       return matchesSearch && matchesFilter;
     });
-  }, [polizas, searchTerm, filterEstatus]);
+  }, [polizas, searchTerm, filterEstatus, dashboardAlertFilter]);
 
   const totalPages = Math.ceil(filteredPolizas.length / itemsPerPage) || 1;
 
@@ -392,6 +419,7 @@ const SeguimientoPolizas = () => {
                 className="polizas-filter-select-visible"
                 onChange={(e) => {
                   setFilterEstatus(e.target.value);
+                  setDashboardAlertFilter(null);
                   setCurrentPage(1);
                 }}
                 value={filterEstatus}

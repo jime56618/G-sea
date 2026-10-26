@@ -1,3 +1,5 @@
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -59,7 +61,17 @@ const Tramites = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { can } = useAuth();
+  useEffect(() => {
+    if (location.state?.dashboardCreate) {
+      const remainingState = { ...location.state };
+      delete remainingState.dashboardCreate;
+      navigate(location.pathname + location.search + location.hash, { replace: true, state: remainingState });
+    }
+  }, [location, navigate]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(() => Boolean(location.state?.dashboardCreate && can('tramites.manage') && can('tramites.view')));
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -69,6 +81,15 @@ const Tramites = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
+
+  useEffect(() => {
+    if (location.state?.alertFilter !== 'atencion') return;
+    setFilterStatus('amarillo');
+    navigate(location.pathname + location.search + location.hash, {
+      replace: true,
+      state: null,
+    });
+  }, [location, navigate]);
 
   const loadTramites = useCallback(async () => {
     setLoading(true);

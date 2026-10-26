@@ -99,17 +99,20 @@ export default function RolesEditor() {
   if (!can('roles.manage')) {
     return (
       <PageLayout>
-        <div className="gsea-config-empty">
-          <Shield size={40} className="gsea-config-empty__icon" />
-          <p>No tienes permiso para gestionar roles.</p>
-        </div>
+        <section className="gsea-config-page">
+          <div className="gsea-config-empty">
+            <Shield size={40} className="gsea-config-empty__icon" />
+            <p>No tienes permiso para gestionar roles.</p>
+          </div>
+        </section>
       </PageLayout>
     );
   }
 
   return (
     <PageLayout>
-      <ConfigPageHeader
+      <section className="gsea-config-page">
+        <ConfigPageHeader
         icon={Shield}
         title="Roles y permisos"
         subtitle={`Define qué puede hacer cada rol en ${currentWorkspace?.nombre || 'tu promotoría'}.`}
@@ -205,6 +208,7 @@ export default function RolesEditor() {
           )}
         </div>
       </div>
+      </section>
     </PageLayout>
   );
 }

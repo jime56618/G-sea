@@ -1,4 +1,5 @@
 import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -45,6 +46,8 @@ function nombreAgenteDesdePoliza(poliza) {
 function mapCuotaToRegistro(c) {
   return {
     id: c.id,
+    cuota_id: c.id,
+    poliza_id: c.poliza_id,
     poliza: c.poliza?.numero_poliza || '—',
     cliente: c.poliza?.contratante?.nombre || '—',
     agente: nombreAgenteDesdePoliza(c.poliza),
@@ -56,6 +59,9 @@ function mapCuotaToRegistro(c) {
 }
 
 const SeguimientoCobranza = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const dashboardSelection = location.state?.dashboardCreate ? location.state : null;
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [hoverStatus, setHoverStatus] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
@@ -63,7 +69,10 @@ const SeguimientoCobranza = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => dashboardSelection?.cliente || '');
+  const [statusFilter, setStatusFilter] = useState(() => location.state?.alertFilter === 'vencida' ? 'vencida' : 'todos');
+  const [focusedCuotaId, setFocusedCuotaId] = useState(() => dashboardSelection?.cuotaId ?? null);
+  const [focusedPolizaId, setFocusedPolizaId] = useState(() => dashboardSelection?.polizaId ?? null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
   const [currentRegistro, setCurrentRegistro] = useState(null);
@@ -77,6 +86,11 @@ const SeguimientoCobranza = () => {
       const json = await fetchJson(`${API_URL}/cobranza_cuotas?per_page=500`);
       const rows = (json.data || []).map(mapCuotaToRegistro);
       setRegistros(rows);
+      if (dashboardSelection) {
+        setSearchTerm(dashboardSelection.cliente || '');
+        setFocusedCuotaId(dashboardSelection.cuotaId ?? null);
+        setFocusedPolizaId(dashboardSelection.polizaId ?? null);
+      }
       setCurrentPage(1);
     } catch (e) {
       setLoadError(e.message || 'No se pudieron cargar las cuotas');
@@ -84,7 +98,7 @@ const SeguimientoCobranza = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dashboardSelection]);
 
   useEffect(() => {
     loadRegistros();
@@ -94,11 +108,22 @@ const SeguimientoCobranza = () => {
     const q = searchTerm.toLowerCase();
     return registros.filter(
       (reg) =>
-        (reg.cliente || '').toLowerCase().includes(q) ||
-        (reg.poliza || '').toLowerCase().includes(q) ||
-        (reg.agente || '').toLowerCase().includes(q)
+        (statusFilter === 'todos' || reg.estatus === statusFilter) &&
+        (
+          (reg.cliente || '').toLowerCase().includes(q) ||
+          (reg.poliza || '').toLowerCase().includes(q) ||
+          (reg.agente || '').toLowerCase().includes(q)
+        )
     );
-  }, [registros, searchTerm]);
+  }, [registros, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    if (location.state?.alertFilter !== 'vencida') return;
+    navigate(location.pathname + location.search + location.hash, {
+      replace: true,
+      state: null,
+    });
+  }, [location, navigate]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRegistros.length / itemsPerPage));
   const paginatedRegistros = useMemo(() => {
@@ -113,6 +138,16 @@ const SeguimientoCobranza = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [itemsPerPage]);
+
+  useEffect(() => {
+    if (!focusedCuotaId || loading) return;
+    const row = document.querySelector(
+      focusedCuotaId
+        ? `[data-cuota-id="${focusedCuotaId}"]`
+        : `[data-poliza-id="${focusedPolizaId}"]`
+    );
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focusedCuotaId, loading, filteredRegistros.length]);
 
 
   const handleOpenAdd = () => {
@@ -243,8 +278,9 @@ const SeguimientoCobranza = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className="cobranza-btn-filter"
+              onClick={() => setStatusFilter('todos')}
             >
-              <FiFilter size={16} /> Filtros
+              <FiFilter size={16} /> {statusFilter === 'todos' ? 'Filtros' : 'Limpiar filtro'}
             </motion.button>
           </div>
 
@@ -282,10 +318,13 @@ const SeguimientoCobranza = () => {
                     paginatedRegistros.map((reg, index) => (
                     <motion.tr 
                       key={reg.id}
+                      data-cuota-id={reg.cuota_id}
+                      data-poliza-id={reg.poliza_id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
                       className="cobranza-table-row"
+                      style={reg.cuota_id === focusedCuotaId || (!focusedCuotaId && reg.poliza_id === focusedPolizaId) ? { backgroundColor: '#eff6ff', boxShadow: 'inset 3px 0 0 #2563eb' } : undefined}
                     >
                       <td className="cobranza-cell-poliza">
                         <span className="cobranza-badge-poliza">{reg.poliza}</span>

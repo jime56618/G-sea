@@ -21,7 +21,8 @@ export default function IntegrationsPage() {
 
   return (
     <PageLayout>
-      <ConfigPageHeader
+      <section className="gsea-config-page">
+        <ConfigPageHeader
         icon={Plug}
         title="Integraciones"
         subtitle="Conecta aplicaciones externas con GSEA CRM."
@@ -88,6 +89,7 @@ export default function IntegrationsPage() {
           </div>
         </div>
       </div>
+      </section>
     </PageLayout>
   );
 }

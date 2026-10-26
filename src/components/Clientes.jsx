@@ -1,3 +1,5 @@
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -52,7 +54,17 @@ export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [modalState, setModalState] = useState({ type: null, data: null });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { can } = useAuth();
+  useEffect(() => {
+    if (location.state?.dashboardCreate) {
+      const remainingState = { ...location.state };
+      delete remainingState.dashboardCreate;
+      navigate(location.pathname + location.search + location.hash, { replace: true, state: remainingState });
+    }
+  }, [location, navigate]);
+  const [modalState, setModalState] = useState(() => ({ type: location.state?.dashboardCreate && can('contratantes.manage') && can('contratantes.view') ? 'agregar' : null, data: null }));
 
   const loadContratantes = useCallback(async (signal) => {
     if (!cached) setLoading(true);

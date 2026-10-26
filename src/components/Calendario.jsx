@@ -1,3 +1,5 @@
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -138,7 +140,17 @@ export default function CobranzaPage() {
   const [newPriority, setNewPriority] = useState("medium");
   const [newStatus, setNewStatus] = useState("pending");
 
-  const [activityTypeModal, setActivityTypeModal] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { can } = useAuth();
+  useEffect(() => {
+    if (location.state?.dashboardCreate) {
+      const remainingState = { ...location.state };
+      delete remainingState.dashboardCreate;
+      navigate(location.pathname + location.search + location.hash, { replace: true, state: remainingState });
+    }
+  }, [location, navigate]);
+  const [activityTypeModal, setActivityTypeModal] = useState(() => Boolean(location.state?.dashboardCreate && can('calendar.view')));
   const [selectedActivityType, setSelectedActivityType] = useState("");
 
   const [contextMenu, setContextMenu] = useState(null);

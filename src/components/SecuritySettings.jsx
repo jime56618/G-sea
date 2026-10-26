@@ -24,7 +24,8 @@ export default function SecuritySettings() {
 
   return (
     <PageLayout>
-      <ConfigPageHeader
+      <section className="gsea-config-page">
+        <ConfigPageHeader
         icon={ShieldCheck}
         title="Seguridad"
         subtitle="Contraseña, autenticación y sesiones. Vista temporal solo frontend."
@@ -145,6 +146,7 @@ export default function SecuritySettings() {
           </table>
         </div>
       </div>
-    </PageLayout>
-  );
+    </section>
+  </PageLayout>
+);
 }

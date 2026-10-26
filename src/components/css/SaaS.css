@@ -839,158 +839,37 @@
 
 
 /* ==========================================================
-   CORRECCIÓN DE ALINEACIÓN — EVITA DOBLE MARGEN DE SIDEBAR
+   CONFIGURACIÓN GSEA — CONTENEDOR UNIFICADO Y ALINEACIÓN
    ========================================================== */
 
-/*
-  PageLayout ya se encuentra dentro del shell desplazado por la sidebar.
-  Estas reglas evitan que este módulo vuelva a sumar 280/88 px.
-*/
-body:has(.gsea-team-page) .gsea-app-main--expanded,
-body:has(.gsea-team-page) .gsea-app-main--collapsed {
-  margin-left: 0 !important;
-  width: 100% !important;
-}
-
-/* El contenedor padre deja de centrar o limitar este módulo */
-body:has(.gsea-team-page) .gsea-config-page,
-body:has(.gsea-team-page) main,
-body:has(.gsea-team-page) .gsea-app-main {
-  max-width: none !important;
-}
-
-body:has(.gsea-team-page) .gsea-config-page {
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* Contenido alineado cerca de la sidebar */
-.gsea-team-page {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding-left: 30px !important;
-  padding-right: 30px !important;
-  align-self: stretch;
+.gsea-config-page {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
-/* Evita que el encabezado conserve un ancho centrado heredado */
-.gsea-team-page > .gsea-config-page-header,
-.gsea-team-page > .gsea-config-header,
-.gsea-team-page > header {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
+.gsea-config-page > .gsea-config-header,
+.gsea-config-page > .gsea-config-page-header,
+.gsea-config-page > header {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 
-/* El contenido usa todo el espacio disponible sin perder proporción */
+/* Equipo e invitaciones: alineado con el contenedor unificado */
+.gsea-team-page {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+}
+
 .gsea-team-overview,
 .gsea-team-history-card {
   width: 100%;
-  max-width: none;
-}
-
-@media (max-width: 820px) {
-  body:has(.gsea-team-page) .gsea-app-main--expanded,
-  body:has(.gsea-team-page) .gsea-app-main--collapsed {
-    margin-left: 0 !important;
-  }
-
-  .gsea-team-page {
-    padding-left: 18px !important;
-    padding-right: 18px !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .gsea-team-page {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-  }
-}
-
-/* ==========================================================
-   CORRECCIÓN DEFINITIVA — CENTRADO DENTRO DEL ÁREA ÚTIL
-   La sidebar conserva su espacio. El contenido se centra
-   únicamente dentro del área restante de la pantalla.
-   ========================================================== */
-
-/* Restaurar el desplazamiento real del shell según la sidebar */
-body:has(.gsea-team-page) .gsea-app-main--expanded {
-  margin-left: 280px !important;
-  width: calc(100% - 280px) !important;
-}
-
-body:has(.gsea-team-page) .gsea-app-main--collapsed {
-  margin-left: 88px !important;
-  width: calc(100% - 88px) !important;
-}
-
-/* El PageLayout ocupa el área útil, no toda la ventana */
-body:has(.gsea-team-page) .gsea-app-main,
-body:has(.gsea-team-page) .gsea-config-page,
-body:has(.gsea-team-page) main {
-  min-width: 0 !important;
-  max-width: none !important;
-}
-
-/* Centrar el módulo dentro del espacio que queda después de la sidebar */
-.gsea-team-page {
-  width: calc(100% - 48px) !important;
-  max-width: 1120px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding: 30px 0 42px !important;
-  box-sizing: border-box;
-}
-
-/* Encabezado y tarjetas siguen exactamente el mismo eje */
-.gsea-team-page > .gsea-config-page-header,
-.gsea-team-page > .gsea-config-header,
-.gsea-team-page > header,
-.gsea-team-overview,
-.gsea-team-history-card {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-}
-
-/* Cuando la sidebar cambia de tamaño, el contenido se recentra solo */
-@media (max-width: 1180px) {
-  .gsea-team-page {
-    width: calc(100% - 36px) !important;
-    max-width: 1040px !important;
-  }
-}
-
-@media (max-width: 900px) {
-  body:has(.gsea-team-page) .gsea-app-main--expanded,
-  body:has(.gsea-team-page) .gsea-app-main--collapsed {
-    margin-left: 72px !important;
-    width: calc(100% - 72px) !important;
-  }
-
-  .gsea-team-page {
-    width: calc(100% - 28px) !important;
-    max-width: none !important;
-    padding-top: 24px !important;
-  }
-}
-
-@media (max-width: 640px) {
-  body:has(.gsea-team-page) .gsea-app-main--expanded,
-  body:has(.gsea-team-page) .gsea-app-main--collapsed {
-    margin-left: 64px !important;
-    width: calc(100% - 64px) !important;
-  }
-
-  .gsea-team-page {
-    width: calc(100% - 20px) !important;
-    padding-top: 18px !important;
-    padding-bottom: 28px !important;
-  }
+  max-width: 100%;
 }
