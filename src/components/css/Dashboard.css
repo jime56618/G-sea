@@ -60,7 +60,7 @@ body {
   min-height: 100vh;
   margin-left: var(--gsea-sidebar-width, 248px);
   width: calc(100% - var(--gsea-sidebar-width, 248px));
-  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: margin-left 0.26s cubic-bezier(0.4, 0, 0.2, 1), width 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   background-color: var(--gsea-canvas);
 }
 
@@ -1238,5 +1238,5 @@ body {
 .gsea-insurer-values div {display:flex;justify-content:space-between;gap:.5rem;font-size:.625rem;}
 .gsea-insurer-values span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gsea-on-surface-variant);}
 .gsea-insurer-values strong {flex:0 0 auto;color:var(--gsea-on-surface);font-variant-numeric:tabular-nums;}
-@media(max-width:760px){.gsea-portfolio-grid{grid-template-columns:1fr}.gsea-dashboard-content{padding:1rem}.gsea-dashboard-main{width:calc(100% - var(--gsea-sidebar-width,72px));}}
+@media(max-width:760px){.gsea-portfolio-grid{grid-template-columns:1fr}.gsea-dashboard-content{padding:1rem}.gsea-dashboard-main{margin-left:min(var(--gsea-sidebar-width,72px),82vw);width:calc(100% - min(var(--gsea-sidebar-width,72px),82vw));}}
 @media(max-width:480px){.gsea-ramos-visual{grid-template-columns:1fr}.gsea-donut-wrap{height:130px}.gsea-portfolio-total{font-size:1.2rem;}}

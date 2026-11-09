@@ -1,0 +1,25 @@
+/* Solo las celdas que contienen las casillas compartidas de selección. */
+:is(th, td):has(> span.gsea-record-checkbox) {
+  padding-left: 36px;
+}
+
+.gsea-record-checkbox {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.gsea-record-checkbox-input {
+  display: block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+}

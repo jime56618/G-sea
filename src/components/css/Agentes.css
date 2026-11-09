@@ -37,11 +37,11 @@
 }
 
 .agents-main-content.sidebar-expanded {
-  margin-left: 260px;
+  margin-left: 0;
 }
 
 .agents-main-content.sidebar-collapsed {
-  margin-left: 80px;
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {
@@ -1483,11 +1483,11 @@
 }
 
 .agents-main-content.sidebar-expanded {
-  margin-left: 248px;
+  margin-left: 0;
 }
 
 .agents-main-content.sidebar-collapsed {
-  margin-left: 72px;
+  margin-left: 0;
 }
 
 /* Solo agregar y editar */
@@ -1757,7 +1757,7 @@
   .agents-main-content.sidebar-expanded,
   .agents-main-content.sidebar-collapsed {
     width: auto !important;
-    margin-left: 72px !important;
+    margin-left: 0 !important;
   }
 
   .agents-main {
@@ -1857,7 +1857,7 @@
 @media (max-width: 520px) {
   .agents-main-content.sidebar-expanded,
   .agents-main-content.sidebar-collapsed {
-    margin-left: 64px !important;
+    margin-left: 0 !important;
   }
 
   .agents-filters-wrapper {

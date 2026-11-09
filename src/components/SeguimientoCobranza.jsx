@@ -1,3 +1,5 @@
+import { useRecordExport } from '../utils/useRecordExport';
+import RecordExportTools, { RecordPageCheckbox, RecordRowCheckbox } from './RecordExportTools';
 import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -227,6 +229,8 @@ const SeguimientoCobranza = () => {
     return map[estatus] || estatus || '—';
   };
 
+  const exportController = useRecordExport('cobranza', { q: searchTerm, estatus: statusFilter }, paginatedRegistros.map(item => item.id), loading);
+
   return (
     <div className="cobranza-container">
       <Sidebar onExpand={setIsSidebarExpanded} />
@@ -245,13 +249,7 @@ const SeguimientoCobranza = () => {
               )}
             </div>
             <div className="cobranza-header-actions">
-              <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="cobranza-btn-export"
-              >
-                <FiDownload size={18} /> Exportar
-              </motion.button>
+              <RecordExportTools controller={exportController} buttonClass="cobranza-btn-export" />
               <motion.button 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -290,7 +288,8 @@ const SeguimientoCobranza = () => {
               <table className="cobranza-table">
                 <thead>
                   <tr>
-                    <th>Póliza</th>
+
+                    <th style={{ position: 'relative' }}><RecordPageCheckbox controller={exportController} />Póliza</th>
                     <th>Cliente</th>
                     <th>Agente</th>
                     <th>Fecha Prog.</th>
@@ -326,7 +325,8 @@ const SeguimientoCobranza = () => {
                       className="cobranza-table-row"
                       style={reg.cuota_id === focusedCuotaId || (!focusedCuotaId && reg.poliza_id === focusedPolizaId) ? { backgroundColor: '#eff6ff', boxShadow: 'inset 3px 0 0 #2563eb' } : undefined}
                     >
-                      <td className="cobranza-cell-poliza">
+                      <td style={{ position: "relative" }} className="cobranza-cell-poliza">
+                        <RecordRowCheckbox controller={exportController} id={reg.id} />
                         <span className="cobranza-badge-poliza">{reg.poliza}</span>
                       </td>
                       <td className="cobranza-cell-cliente">

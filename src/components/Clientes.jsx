@@ -1,3 +1,5 @@
+import { useRecordExport } from '../utils/useRecordExport';
+import RecordExportTools, { RecordPageCheckbox, RecordRowCheckbox } from './RecordExportTools';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -128,6 +130,8 @@ export default function Clientes() {
     return filteredClients.slice(start, start + itemsPerPage);
   }, [filteredClients, currentPage, itemsPerPage]);
 
+  const exportController = useRecordExport('clientes', { q: searchTerm }, currentItems.map(item => item.id), loading);
+
   return (
     <div className="clientes-container">
       <Sidebar onExpand={setIsSidebarExpanded} />
@@ -143,6 +147,8 @@ export default function Clientes() {
               <h1 className="clientes-page-title">Cartera de Clientes</h1>
               
             </div>
+            <div className="clientes-header-actions">
+              <RecordExportTools controller={exportController} buttonClass="clientes-btn-documento" />
             <motion.button
               type="button"
               whileHover={{ scale: 1.02 }}
@@ -152,6 +158,7 @@ export default function Clientes() {
             >
               <FiPlus /> <span>Nuevo Cliente</span>
             </motion.button>
+            </div>
           </div>
 
           {listError && (
@@ -175,13 +182,13 @@ export default function Clientes() {
               />
             </div>
           </div>
-
           <div className="clientes-table-container">
             <div className="clientes-table-responsive">
               <table className="clientes-table">
                 <thead>
                   <tr>
-                    <th>Cliente</th>
+
+                    <th style={{ position: 'relative' }}><RecordPageCheckbox controller={exportController} />Cliente</th>
                     <th>RFC</th>
                     <th>Email</th>
                     <th>Teléfono</th>
@@ -198,7 +205,8 @@ export default function Clientes() {
                       transition={{ delay: index * 0.04 }}
                       className="clientes-table-row"
                     >
-                      <td>
+                      <td style={{ position: "relative" }}>
+                        <RecordRowCheckbox controller={exportController} id={client.id} />
                         <div className="clientes-client-cell">
                           <div className="clientes-client-info">
                             <span className="clientes-client-fullname">{client.nombre}</span>

@@ -1,3 +1,5 @@
+import { useRecordExport } from '../utils/useRecordExport';
+import RecordExportTools, { RecordPageCheckbox, RecordRowCheckbox } from './RecordExportTools';
 import React, { useEffect, useState, useMemo, Fragment, useCallback } from 'react';
 import {
   useReactTable,
@@ -348,6 +350,8 @@ export default function SeccionAgentes() {
     initialState: { pagination: { pageSize: 8 } },
   });
 
+  const exportController = useRecordExport('agentes', { q: globalFilter, status: filtroEstado, empresa: filtroEmpresa }, table.getRowModel().rows.map(row => row.original.id), loading);
+
   return (
     <div className="agents-container">
       <Sidebar onExpand={setIsSidebarExpanded} /> 
@@ -444,7 +448,6 @@ export default function SeccionAgentes() {
                 </select>
                 <ChevronDown size={14} className="agents-select-chevron" />
               </div>
-
               <button onClick={openAddModal} className="agents-add-button">
                 <UserPlus size={18} />
                 <span>Agregar</span>
@@ -456,6 +459,7 @@ export default function SeccionAgentes() {
           <div className="agents-table-container">
             <div className="agents-table-header">
               <h2 className="agents-table-title">Lista de Agentes</h2>
+              <RecordExportTools controller={exportController} buttonClass="agents-clear-filters" />
               {(filtroEstado !== 'todos' || filtroEmpresa !== 'todos' || ordenamiento !== 'reciente' || globalFilter !== '') && (
                 <button 
                   className="agents-clear-filters"
@@ -471,14 +475,15 @@ export default function SeccionAgentes() {
                 </button>
               )}
             </div>
-            
             <div className="agents-table-responsive">
               <table className="agents-table">
                 <thead>
                   {table.getHeaderGroups().map(hg => (
                     <tr key={hg.id}>
+
                       {hg.headers.map(header => (
-                        <th key={header.id} className="agents-table-head" onClick={header.column.getToggleSortingHandler()}>
+                        <th key={header.id} style={header.column.id === "nombreCompleto" ? { position: "relative" } : undefined} className="agents-table-head" onClick={header.column.getToggleSortingHandler()}>
+                          {header.column.id === "nombreCompleto" && <RecordPageCheckbox controller={exportController} />}
                           <div className="agents-table-head-content">
                             {flexRender(header.column.columnDef.header, header.getContext())}
                             {header.column.getCanSort() && (
@@ -494,8 +499,10 @@ export default function SeccionAgentes() {
                   {table.getRowModel().rows.length > 0 ? (
                     table.getRowModel().rows.map(row => (
                       <tr key={row.id} className="agents-table-row">
+
                         {row.getVisibleCells().map(cell => (
-                          <td key={cell.id} className="agents-table-cell">
+                          <td key={cell.id} style={cell.column.id === "nombreCompleto" ? { position: "relative" } : undefined} className="agents-table-cell">
+                            {cell.column.id === "nombreCompleto" && <RecordRowCheckbox controller={exportController} id={row.original.id} />}
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>
                         ))}

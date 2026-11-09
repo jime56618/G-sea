@@ -1,10 +1,9 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./css/Dashboard.css";
 import Sidebar from "./Sidebar";
+import MetaComercial from "./MetaComercial";
 import Navbar from "./Navbar";
-import { persistWorkspaceFromUser } from "../utils/workspaceStorage";
-import { apiFetch } from "../utils/apiClient";
-import { validateDashboardResponse } from "../utils/dashboardService";
+import { adaptDashboardSummary, adaptDashboardCobranza, adaptDashboardAgenda, dashboardAgendaError, useDashboardResource, dashboardPath } from "../utils/dashboardService";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { animate, motion } from "framer-motion";
@@ -55,6 +54,7 @@ const EMPTY_DASHBOARD = {
     pagada: { cantidad: null, monto: null },
     pendiente: { cantidad: null, monto: null },
     vencida: { cantidad: null, monto: null },
+    total_recuperacion: { cantidad: null, monto: null },
   },
   tramites: { total: null, atencion: null, por_etapa: [], por_semaforo: [] },
   operativa: {
@@ -96,6 +96,15 @@ function number(value) {
   return Number(value || 0).toLocaleString("es-MX");
 }
 
+function paidAmounts(group) {
+  if (!group?.montos_por_moneda) return 'No disponible';
+  const entries = Object.entries(group.montos_por_moneda);
+  if (!entries.length) return group.cantidad === 0 ? 'Sin cuotas pagadas' : 'No disponible';
+  return entries.map(([currency, value]) =>
+    `${value == null ? 'N/D' : value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+  ).join(' · ');
+}
+
 function normalizeRamoName(value) {
   return String(value ?? "")
     .replace(/DAÃ‘OS/g, "DAÑOS")
@@ -104,9 +113,9 @@ function normalizeRamoName(value) {
 
 function semaforoColor(value) {
   const name = String(value ?? "").trim().toLowerCase();
-  if (name.includes("verde")) return "#16A34A";
-  if (name.includes("amarillo")) return "#EAB308";
-  if (name.includes("rojo")) return "#DC2626";
+  if (name === "verde") return "#16A34A";
+  if (name === "amarillo") return "#EAB308";
+  if (name === "rojo") return "#DC2626";
   return "#94A3B8";
 }
 
@@ -175,7 +184,7 @@ function buildActionGroups(operativa) {
   return groups.map(([label, key, fallback]) => ({
     label,
     actions: (Array.isArray(operativa?.[key]) ? operativa[key] : [])
-      .slice(0, 2)
+      .slice(0, key === 'eventos_proximos' ? 4 : 2)
       .map((item, index) => {
         const type = actionType(item, fallback);
         return {
@@ -189,56 +198,63 @@ function buildActionGroups(operativa) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user: authUser } = useAuth();
+  const { user: authUser, currentWorkspace, permissions } = useAuth();
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [user, setUser] = useState(() => {
+  const [user] = useState(() => {
     const stored = localStorage.getItem("user");
     return stored ? JSON.parse(stored) : null;
   });
-  const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
-  const [loadingDashboard, setLoadingDashboard] = useState(true);
-  const [dashboardError, setDashboardError] = useState("");
   const [chartPeriod, setChartPeriod] = useState("6m");
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-
-    const fetchUserAndDashboard = async () => {
-      setLoadingDashboard(true);
-      setDashboardError("");
+  const workspaceId = currentWorkspace?.id ?? authUser?.current_workspace_id;
+  const ready = Boolean(authUser?.id && workspaceId);
+  const scope = JSON.stringify([authUser?.id, workspaceId, [...permissions].sort()]);
+  const summaryResource = useDashboardResource(ready ? dashboardPath('/dashboard/summary', { compact: 1, workspace_id: workspaceId }) : null, scope);
+  const needTotals = Boolean(
+    summaryResource.data &&
+    (summaryResource.data.clientes_total == null || summaryResource.data.polizas_vencidas == null)
+  );
+  const totalsResource = useDashboardResource(ready && needTotals ? dashboardPath('/dashboard/totales', { workspace_id: workspaceId }) : null, scope);
+  const collectionResource = useDashboardResource(ready ? dashboardPath('/dashboard/cobranza', { workspace_id: workspaceId }) : null, scope);
+  const agendaResource = useDashboardResource(ready ? dashboardPath('/calendar/events', { agenda: 'hoy_y_proximos_7_dias', per_page: 4, workspace_id: workspaceId }) : null, scope);
+  const derived = useMemo(() => {
+    let next = { ...EMPTY_DASHBOARD, kpis: { ...EMPTY_DASHBOARD.kpis }, operativa: { ...EMPTY_DASHBOARD.operativa } };
+    const errors = [];
+    if (summaryResource.data) {
+      try { next = adaptDashboardSummary(summaryResource.data); }
+      catch { errors.push('Respuesta incompatible del resumen principal.'); }
+    }
+    if (totalsResource?.data) {
+      next.kpis = {
+        ...next.kpis,
+        clientes_total: totalsResource.data.clientes_total ?? next.kpis.clientes_total,
+        polizas_vencidas: totalsResource.data.polizas_vencidas ?? next.kpis.polizas_vencidas,
+      };
+    }
+    if (collectionResource.data) {
       try {
-        const [userResult, summaryResult] = await Promise.all([
-          apiFetch("/user", { signal: controller.signal }),
-          apiFetch("/dashboard/summary", { signal: controller.signal }),
-        ]);
-
-        if (!active) return;
-        const userData = userResult;
-        const summaryData = summaryResult;
-        validateDashboardResponse("/dashboard/summary", summaryData);
-        if (userData) {
-          setUser(userData);
-          localStorage.setItem("user", JSON.stringify(userData));
-          persistWorkspaceFromUser(userData);
-        }
-        setDashboard(summaryData);
-      } catch (error) {
-        if (!active) return;
-        console.error("Error cargando dashboard:", error);
-        setDashboard(EMPTY_DASHBOARD);
-        setDashboardError(error.message || "No se pudo cargar el dashboard.");
-      } finally {
-        if (active) setLoadingDashboard(false);
-      }
-    };
-
-    fetchUserAndDashboard();
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, []);
+        const collection = adaptDashboardCobranza(collectionResource.data);
+        next.cobranza = { ...next.cobranza, ...collection };
+        next.operativa = { ...next.operativa, cobros_pendientes: collection.casos_prioritarios.map(item => ({
+          ...item, type: 'cobro', client: item.cliente, detail: `Póliza ${item.poliza} · ${item.fecha ?? 'Sin fecha'}`,
+        })) };
+      } catch { errors.push('Respuesta incompatible de cobranza.'); }
+    }
+    let agenda = { total: null, error: '' };
+    if (agendaResource.data) {
+      try { const value = adaptDashboardAgenda(agendaResource.data); agenda.total = value.total; next.operativa = { ...next.operativa, eventos_proximos: value.events }; }
+      catch (error) { agenda.error = dashboardAgendaError(error); }
+    } else if (agendaResource.error) agenda.error = dashboardAgendaError(agendaResource.error);
+    return { dashboard: next, agenda, errors };
+  }, [summaryResource.data, totalsResource?.data, collectionResource.data, agendaResource.data, agendaResource.error]);
+  const dashboard = derived.dashboard;
+  const agendaState = derived.agenda;
+  const isInitialLoading = !ready || (summaryResource.loading && !summaryResource.data);
+  const activeResources = [summaryResource, collectionResource, agendaResource, ...(needTotals ? [totalsResource] : [])];
+  const isAnyLoading = !ready || activeResources.some(resource => resource.loading);
+  const dashboardError = [
+    ...derived.errors,
+    ...(summaryResource.error ? [summaryResource.error.status === 403 ? 'Resumen principal: sin permisos de consulta.' : 'Resumen principal: no se pudo cargar la información.'] : []),
+  ].join(' ');
 
   const charts = dashboard.charts || EMPTY_DASHBOARD.charts;
   const ventasData = Array.isArray(charts.ventas_mensuales) ? charts.ventas_mensuales : [];
@@ -252,7 +268,6 @@ export default function Dashboard() {
   const cobranza = dashboard.cobranza || EMPTY_DASHBOARD.cobranza;
   const tramites = dashboard.tramites || EMPTY_DASHBOARD.tramites;
   const actionGroups = useMemo(() => buildActionGroups(dashboard.operativa), [dashboard.operativa]);
-  const progress = Math.min(Math.max(Number(dashboard.objetivo?.progress_pct || 0), 0), 100);
   const greetingUser = authUser || user;
   const greetingName =
     greetingUser?.name ||
@@ -289,8 +304,9 @@ export default function Dashboard() {
   const collectionActions = actionGroups.flatMap(group => group.actions.map(action => ({ ...action, group: group.label })))
     .filter(action => action.type === "cobro").slice(0, 4);
   const displayedVentas = chartPeriod === "3m" ? ventasData.slice(-3) : chartPeriod === "12m" ? ventasData.slice(-12) : ventasData.slice(-6);
-  const target = Number(dashboard.objetivo?.target || 0);
-  const current = Number(dashboard.objetivo?.current || 0);
+  const hasCompleteCollectionAmounts =
+    cobranza.pendiente?.monto != null &&
+    cobranza.vencida?.monto != null;
 
   return (
     <div className="gsea-dashboard-page">
@@ -302,7 +318,7 @@ export default function Dashboard() {
             <div>
               <div className="gsea-welcome-title-wrap">
                 <h1 className="gsea-welcome-title">Hola, {greetingName}</h1>
-                {!loadingDashboard && !dashboardError && <span className="gsea-sync-pill"><span className="gsea-sync-pulse" />Datos actualizados</span>}
+                {!isAnyLoading && !dashboardError && <span className="gsea-sync-pill"><span className="gsea-sync-pulse" />Datos actualizados</span>}
               </div>
               <p className="gsea-date-subtitle"><Clock size={14} /> Resumen operativo al día • {formatTodayLabel()}</p>
             </div>
@@ -313,19 +329,19 @@ export default function Dashboard() {
             </div>
           </header>
           {dashboardError && <div role="alert" className="gsea-dashboard-state is-error">{dashboardError}</div>}
-          {loadingDashboard && <div role="status" className="gsea-dashboard-state">Cargando información real del dashboard…</div>}
+          {isInitialLoading && <div role="status" className="gsea-dashboard-state">Cargando información real del dashboard…</div>}
 
           <section className="gsea-kpi-grid" aria-label="Indicadores principales">
             <Kpi title="Clientes totales" value={kpis.clientes_total} icon={Users} tone="is-slate" footer="Cartera registrada" />
             <Kpi title="Pólizas vendidas" value={kpis.polizas_vendidas} icon={ShieldCheck} tone="is-blue" footer="Emisiones registradas" />
-            <Kpi title="Prima mensual" value={kpis.prima_mensual} icon={BadgeDollarSign} tone="is-emerald" currency footer="Importe reportado" />
+            <Kpi title="Prima emitida del periodo" value={kpis.prima_mensual} icon={BadgeDollarSign} tone="is-emerald" currency footer="Importe reportado" />
             <Kpi title="Tasa de renovación" value={kpis.tasa_renovacion} icon={TrendingUp} tone="is-amber" percent footer="Renovaciones registradas" />
             <Kpi title="Pólizas vencidas" value={kpis.polizas_vencidas} icon={AlertCircle} tone="is-danger" danger footer="Requieren atención" />
           </section>
 
           <section className="gsea-alert-grid" aria-label="Alertas operativas">
             <AlertCard title="Cobranza vencida" count={cobranza.vencida?.cantidad} subtitle={`${money(cobranza.vencida?.monto)} pendientes`} icon={AlertCircle} tone="is-danger" onClick={() => navigate('/seguimiento-cobranza', { state: { alertFilter: 'vencida' } })} />
-            <AlertCard title="Trámites en atención" count={tramites.atencion} subtitle={`De ${number(tramites.total)} trámites registrados`} icon={Clock} tone="is-amber" onClick={() => navigate('/tramites', { state: { alertFilter: 'atencion' } })} />
+            <AlertCard title="Trámites en atención" count={tramites.atencion} subtitle={`De ${number(tramites.total)} trámites registrados${tramites.sin_estado == null ? '' : ` · ${number(tramites.sin_estado)} sin estado definido`}`} icon={Clock} tone="is-amber" onClick={() => navigate('/tramites', { state: { alertFilter: 'atencion' } })} />
             <AlertCard title="Pólizas por atender" count={kpis.polizas_vencidas} subtitle="Revisar vigencias y seguimiento" icon={ShieldCheck} tone="is-blue" onClick={() => navigate('/seguimiento-polizas', { state: { alertFilter: 'vencidas' } })} />
           </section>
 
@@ -340,21 +356,21 @@ export default function Dashboard() {
                   <div className="gsea-collect-card" key={action.key}>
                     <span className="gsea-collect-card-stripe" />
                     <div className="gsea-collect-info"><span className="gsea-collect-client">{getActionTitle(action.item, action.type)}</span><span className="gsea-collect-desc">{getActionDetail(action.item)}</span></div>
-                    {action.item?.monto != null && <strong className="gsea-collect-amount">{money(action.item.monto)}</strong>}
+                    {action.item?.monto != null && <strong className="gsea-collect-amount">{action.item.moneda === 'USD' ? `${Number(action.item.monto).toLocaleString('es-MX', {style:'currency',currency:'USD'})} USD` : money(action.item.monto)}</strong>}
                     <button type="button" className="gsea-btn-collect" onClick={() => handleAction(action)}>Cobrar</button>
                   </div>
-                )) : <EmptyState text="No hay cobros prioritarios reportados." />}
+                )) : <EmptyState text={collectionResource.loading && !collectionResource.data ? "Consultando cobranza…" : "No hay cobros prioritarios reportados."} />}
               </div>
               <div className="gsea-panel-footer"><span className="gsea-panel-sub">Vencido: {money(cobranza.vencida?.monto)}</span><button className="gsea-panel-link gsea-link-button" onClick={() => navigate('/seguimiento-cobranza')}>Ver cobranza <ArrowUpRight size={13}/></button></div>
             </article>
             <article className="gsea-ops-panel">
-              <div className="gsea-panel-top"><div className="gsea-panel-top-left"><div className="gsea-panel-icon is-blue"><CalendarDays size={17}/></div><div><h2 className="gsea-panel-title">Agenda y seguimiento</h2><p className="gsea-panel-sub">Eventos próximos registrados</p></div></div><span className="gsea-priority-badge gsea-priority-blue">{agendaActions.length} eventos</span></div>
+              <div className="gsea-panel-top"><div className="gsea-panel-top-left"><div className="gsea-panel-icon is-blue"><CalendarDays size={17}/></div><div><h2 className="gsea-panel-title">Agenda y seguimiento</h2><p className="gsea-panel-sub">Hoy y próximos siete días</p></div></div><span className="gsea-priority-badge gsea-priority-blue">{number(agendaState.total)} eventos</span></div>
               <div className="gsea-ops-list">
                 {agendaActions.length ? agendaActions.map(action => (
                   <button type="button" key={action.key} className="gsea-agenda-card is-active gsea-row-button" onClick={() => handleAction(action)}>
                     <div className="gsea-agenda-left"><div className="gsea-panel-icon is-blue"><CalendarDays size={14}/></div><div className="gsea-agenda-text-wrap"><span className="gsea-agenda-title">{getActionTitle(action.item, action.type)}</span><span className="gsea-agenda-sub">{getActionDetail(action.item)}</span></div></div><span className="gsea-agenda-badge is-blue">Ver</span>
                   </button>
-                )) : <EmptyState text="No hay eventos próximos reportados." />}
+                )) : <EmptyState text={agendaResource.loading && !agendaResource.data ? "Consultando agenda…" : agendaState.error || "No hay eventos para hoy y los próximos siete días."} />}
               </div>
               <div className="gsea-panel-footer is-centered"><button type="button" className="gsea-panel-link gsea-link-button" onClick={() => navigate('/calendario')}>Ir al calendario <ArrowUpRight size={13}/></button></div>
             </article>
@@ -363,16 +379,60 @@ export default function Dashboard() {
           <section className="gsea-commercial-card">
             <div className="gsea-commercial-top"><div className="gsea-commercial-title-wrap"><h2 className="gsea-commercial-title">Rendimiento comercial</h2><span className="gsea-commercial-sub">Ventas mensuales y avance de objetivo</span></div><div className="gsea-toggle-group" aria-label="Periodo de gráfica">{[['3m','3 meses'],['6m','6 meses'],['12m','12 meses']].map(([key,label]) => <button key={key} type="button" className={`gsea-toggle-btn ${chartPeriod===key?'is-active':''}`} onClick={() => setChartPeriod(key)}>{label}</button>)}</div></div>
             <div className="gsea-commercial-grid"><div className="gsea-chart-container">{displayedVentas.length ? <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><LineChart data={displayedVentas} margin={{top:8,right:12,left:-10,bottom:0}}><CartesianGrid stroke="#e2e8f0" strokeDasharray="3 4" vertical={false}/><XAxis dataKey="name" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${Math.round(v/1000)}k`:v}/><Tooltip content={<MoneyTooltip/>}/><Line type="monotone" dataKey="ventas" stroke="#2563eb" strokeWidth={2.5} dot={false} activeDot={{r:4}}/></LineChart></ResponsiveContainer> : <EmptyState text="Sin datos de ventas para el periodo."/>}</div>
-              <div className="gsea-target-box"><div className="gsea-target-top"><span className="gsea-target-title">Meta comercial</span>{target>0&&<span className="gsea-target-badge">{progress.toFixed(1)}%</span>}</div><div className="gsea-target-stat-row"><strong>{money(current)}</strong><span>de {target>0?money(target):'Meta no configurada'}</span></div><div className="gsea-target-bar-wrap"><div className="gsea-target-bar-fill" style={{width:`${progress}%`}}/></div><span className="gsea-target-pct">{target>0?`${progress.toFixed(1)}% alcanzado`:'Sin objetivo establecido'}</span><div className="gsea-target-bottom"><span>Ventas registradas</span><strong>{number(kpis.polizas_vendidas)} pólizas</strong></div></div>
+              <MetaComercial key={currentWorkspace?.id ?? "sin-workspace"} />
             </div>
           </section>
 
           <section className="gsea-extended-section"><div className="gsea-commercial-top"><div className="gsea-commercial-title-wrap"><h2 className="gsea-commercial-title">Cartera y trámites</h2><span className="gsea-commercial-sub">Información complementaria del CRM</span></div></div>
             <div className="gsea-portfolio-grid">
-              <div className="gsea-portfolio-block gsea-portfolio-collection"><h3 className="gsea-panel-title">Estado de cobranza</h3><div className="gsea-portfolio-total-label">Total pendiente de recuperación</div><strong className="gsea-portfolio-total">{money(cobranza.pendiente?.monto)}</strong><div className="gsea-collection-segments" aria-label="Distribución de cobranza"><span className="is-pending" style={{width:`${((Number(cobranza.pendiente?.monto)||0) / Math.max((Number(cobranza.pendiente?.monto)||0)+(Number(cobranza.vencida?.monto)||0),1))*100}%`}} /><span className="is-overdue" style={{width:`${((Number(cobranza.vencida?.monto)||0) / Math.max((Number(cobranza.pendiente?.monto)||0)+(Number(cobranza.vencida?.monto)||0),1))*100}%`}} /></div><div className="gsea-collection-legend"><span><i className="is-pending" />Pendiente</span><span><i className="is-overdue" />Vencida</span></div><div className="gsea-portfolio-list">{collections.map(row=><div className="gsea-portfolio-row" key={row.label}><div className="gsea-portfolio-row-label"><span className="gsea-portfolio-dot" data-tone={row.color}/><span>{row.label}</span><small>{number(row.data?.cantidad)} cuotas</small></div><strong>{money(row.data?.monto)}</strong></div>)}</div></div>
-              <div className="gsea-portfolio-block gsea-portfolio-procedures"><div className="gsea-portfolio-heading"><h3 className="gsea-panel-title">Estado de trámites</h3><strong className="gsea-portfolio-total">{number(tramites.total)}</strong></div><span className="gsea-portfolio-total-label">Trámites registrados</span>{(tramites.por_semaforo?.length ? tramites.por_semaforo : tramites.por_etapa || []).length ? <div className="gsea-procedure-chart"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><PieChart><Pie data={(tramites.por_semaforo?.length ? tramites.por_semaforo : tramites.por_etapa)} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={3}>{(tramites.por_semaforo?.length ? tramites.por_semaforo : tramites.por_etapa).map((item,index)=><Cell key={`${item.name}-${index}`} fill={semaforoColor(item.name)} />)}</Pie><Tooltip formatter={(value,name)=>[number(value),name]} /></PieChart></ResponsiveContainer></div> : <div className="gsea-procedure-empty"><span>{number(tramites.atencion)} en atención</span><small>Sin desglose por etapa</small></div>}{(tramites.por_semaforo?.length ? tramites.por_semaforo : tramites.por_etapa || []).length > 0 && <div className="gsea-portfolio-legend">{(tramites.por_semaforo?.length ? tramites.por_semaforo : tramites.por_etapa).map((item,index)=><span key={`${item.name}-${index}`}><i style={{backgroundColor:semaforoColor(item.name)}} />{item.name}<b>{number(item.value)}</b></span>)}</div>}</div>
+              <div className="gsea-portfolio-block gsea-portfolio-collection">
+                <h3 className="gsea-panel-title">Estado de cobranza</h3>
+                <div className="gsea-portfolio-total-label">Total pendiente de recuperación</div>
+                <strong className="gsea-portfolio-total">{money(cobranza.total_recuperacion?.monto)}</strong>
+                <div className="gsea-collection-segments" aria-label="Distribución de cobranza">
+                  {hasCompleteCollectionAmounts && (
+                    <>
+                      <span
+                        className="is-pending"
+                        style={{
+                          width: `${((Number(cobranza.pendiente.monto) || 0) / Math.max((Number(cobranza.pendiente.monto) || 0) + (Number(cobranza.vencida.monto) || 0), 1)) * 100}%`,
+                        }}
+                      />
+                      <span
+                        className="is-overdue"
+                        style={{
+                          width: `${((Number(cobranza.vencida.monto) || 0) / Math.max((Number(cobranza.pendiente.monto) || 0) + (Number(cobranza.vencida.monto) || 0), 1)) * 100}%`,
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+                <div className="gsea-collection-legend">
+                  <span><i className="is-pending" />Pendiente</span>
+                  <span><i className="is-overdue" />Vencida</span>
+                </div>
+                <div className="gsea-portfolio-list">
+                  {collections.map(row => (
+                    <div className="gsea-portfolio-row" key={row.label}>
+                      <div className="gsea-portfolio-row-label">
+                        <span className="gsea-portfolio-dot" data-tone={row.color} />
+                        <span>{row.label}</span>
+                        <small>{number(row.data?.cantidad)} cuotas</small>
+                      </div>
+                      <strong>{row.label === "Pagada" ? paidAmounts(row.data) : money(row.data?.monto)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="gsea-portfolio-block gsea-portfolio-procedures">
+                <div className="gsea-portfolio-heading"><h3 className="gsea-panel-title">Estado de trámites</h3><strong className="gsea-portfolio-total">{number(tramites.total)}</strong></div>
+                <span className="gsea-portfolio-total-label">Trámites registrados</span>
+                {tramites.por_semaforo?.some(item => item.value > 0) ? <div className="gsea-procedure-chart"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><PieChart><Pie data={tramites.por_semaforo.filter(item => item.value > 0)} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={3}>{tramites.por_semaforo.filter(item => item.value > 0).map(item => <Cell key={item.color} fill={semaforoColor(item.color)} />)}</Pie><Tooltip formatter={(value,name)=>[number(value),name]} /></PieChart></ResponsiveContainer></div> : <div className="gsea-procedure-empty"><span>{tramites.sin_semaforo_valido == null ? 'Desglose no disponible' : tramites.total === 0 ? 'Sin trámites registrados' : 'Sin trámites con semáforo válido'}</span></div>}
+                {tramites.por_semaforo?.length > 0 && <div className="gsea-portfolio-legend">{tramites.por_semaforo.map(item => <span key={item.color}><i style={{backgroundColor:semaforoColor(item.color)}} />{item.name}<b>{number(item.value)}</b></span>)}</div>}
+                {tramites.sin_semaforo_valido != null && <div className="gsea-portfolio-legend"><span>Sin semáforo válido<b>{number(tramites.sin_semaforo_valido)}</b></span></div>}
+              </div>
               <div className="gsea-portfolio-block gsea-portfolio-ramos"><h3 className="gsea-panel-title">Pólizas por ramo</h3>{ramosData.length ? <div className="gsea-ramos-visual"><div className="gsea-donut-wrap"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><PieChart><Pie data={ramosData} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="86%" paddingAngle={2}>{ramosData.map((item,index)=><Cell key={`${item.name}-${index}`} fill={POLICY_COLORS[index%POLICY_COLORS.length]} />)}</Pie><Tooltip formatter={(value,name)=>[number(value),normalizeRamoName(name)]} /></PieChart></ResponsiveContainer></div><div className="gsea-portfolio-legend">{ramosData.map((item,index)=><span key={`${item.name}-${index}`}><i style={{backgroundColor:POLICY_COLORS[index%POLICY_COLORS.length]}} /><em>{normalizeRamoName(item.name)}</em><b>{number(item.value)}</b></span>)}</div></div> : <EmptyState text="Sin datos por ramo."/>}</div>
-              <div className="gsea-portfolio-block gsea-portfolio-insurers"><h3 className="gsea-panel-title">Cartera por aseguradora</h3>{aseguradorasData.length ? <div className="gsea-insurer-chart"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><BarChart data={aseguradorasData} layout="vertical" margin={{top:2,right:12,left:8,bottom:2}}><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={86} tick={{fontSize:10,fill:"#475569"}} axisLine={false} tickLine={false} /><Tooltip formatter={(value,name)=>[number(value),"Pólizas"]} /><Bar dataKey="polizas" fill="#2563eb" radius={[0,4,4,0]} barSize={12} /></BarChart></ResponsiveContainer></div> : <EmptyState text="Sin aseguradoras reportadas."/>}<div className="gsea-insurer-values">{aseguradorasData.map((item,index)=><div key={`${item.aseguradora_id||item.name}-${index}`}><span>{item.name}</span><strong>{money(item.prima_total)}</strong></div>)}</div></div>
+              <div className="gsea-portfolio-block gsea-portfolio-insurers"><h3 className="gsea-panel-title">Cartera por aseguradora</h3>{aseguradorasData.length ? <div className="gsea-insurer-chart"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><BarChart data={aseguradorasData} layout="vertical" margin={{top:2,right:12,left:8,bottom:2}}><XAxis type="number" hide /><YAxis type="category" dataKey="name" width={86} tick={{fontSize:10,fill:"#475569"}} axisLine={false} tickLine={false} /><Tooltip formatter={(value,name)=>[number(value),"Pólizas"]} /><Bar dataKey="polizas" fill="#2563eb" radius={[0,4,4,0]} barSize={12} /></BarChart></ResponsiveContainer></div> : <EmptyState text="Sin aseguradoras reportadas."/>}<div className="gsea-insurer-values">{aseguradorasData.map((item,index)=><div key={`${item.aseguradora_id||item.name}-${index}`}><span>{item.name}</span><strong>{number(item.polizas)} pólizas</strong></div>)}</div></div>
             </div>
           </section>
         </motion.div>
@@ -382,7 +442,7 @@ export default function Dashboard() {
 }
 
 function Kpi({title,value,icon:Icon,tone,footer,currency=false,percent=false,danger=false}) {
-  return <article className={`gsea-kpi-card ${danger?'is-danger':''}`}><div className="gsea-kpi-header"><span className="gsea-kpi-label">{title}</span><span className={`gsea-kpi-icon-box ${tone}`}><Icon size={15}/></span></div><div className="gsea-kpi-body"><strong className="gsea-kpi-value">{currency?money(value):percent?`${number(value)}%`:number(value)}</strong></div><div className="gsea-kpi-footer"><span>{footer}</span></div></article>;
+  return <article className={`gsea-kpi-card ${danger?'is-danger':''}`}><div className="gsea-kpi-header"><span className="gsea-kpi-label">{title}</span><span className={`gsea-kpi-icon-box ${tone}`}><Icon size={15}/></span></div><div className="gsea-kpi-body"><strong className="gsea-kpi-value">{currency?money(value):percent && value != null?`${number(value)}%`:number(value)}</strong></div><div className="gsea-kpi-footer"><span>{footer}</span></div></article>;
 }
 function AlertCard({title,count,subtitle,icon:Icon,tone,onClick}) {
   return <button type="button" className={`gsea-alert-card gsea-row-button ${tone==='is-danger'?'is-danger':''}`} onClick={onClick}><span className={`gsea-alert-icon-wrap ${tone}`}><Icon size={17}/></span><span className="gsea-alert-content"><span className="gsea-alert-title-row"><strong className="gsea-alert-title">{title}</strong><span className={`gsea-alert-tag ${tone}`}>{number(count)}</span></span><span className="gsea-alert-desc">{subtitle}</span></span><span className={`gsea-alert-action ${tone==='is-danger'?'is-danger':''}`}>Ver <ArrowUpRight size={14}/></span></button>;

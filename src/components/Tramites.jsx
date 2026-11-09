@@ -1,6 +1,8 @@
+import { useRecordExport } from '../utils/useRecordExport';
+import RecordExportTools, { RecordPageCheckbox, RecordRowCheckbox } from './RecordExportTools';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import React, { useState, useMemo, Fragment, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, Fragment, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import {
@@ -54,6 +56,7 @@ function mapTramiteFromApi(row) {
     fecha: row.fecha_alta?.slice?.(0, 10) || '',
     ultimaModificacion: row.fecha_ultima_modificacion?.slice?.(0, 10) || row.updated_at?.slice?.(0, 10) || '',
     status,
+    estado: row.estado ?? '',
   };
 }
 
@@ -81,10 +84,13 @@ const Tramites = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
+  const [estadoDisponible, setEstadoDisponible] = useState(false);
+  const [soloEnAtencion, setSoloEnAtencion] = useState(false);
+  const loadAttempt = useRef(0);
 
   useEffect(() => {
     if (location.state?.alertFilter !== 'atencion') return;
-    setFilterStatus('amarillo');
+    setSoloEnAtencion(true);
     navigate(location.pathname + location.search + location.hash, {
       replace: true,
       state: null,
@@ -92,24 +98,29 @@ const Tramites = () => {
   }, [location, navigate]);
 
   const loadTramites = useCallback(async () => {
+    const attempt = ++loadAttempt.current;
     setLoading(true);
     setListError('');
     try {
-      const res = await fetch(`${API_URL}/tramites?per_page=200`, { headers: authHeaders() });
+      const res = await fetch(`${API_URL}/tramites?per_page=200${soloEnAtencion ? '&estado=en_atencion' : ''}`, { headers: authHeaders() });
       const json = await res.json();
+      if (attempt !== loadAttempt.current) return;
       if (!res.ok) throw new Error(json.message || 'Error al cargar trámites');
       const rows = json.data || [];
       setData(rows.map(mapTramiteFromApi));
+      setEstadoDisponible(json.estado_disponible === true);
     } catch (e) {
+      if (attempt !== loadAttempt.current) return;
       setListError(e.message || 'Error de red');
       setData([]);
     } finally {
-      setLoading(false);
+      if (attempt === loadAttempt.current) setLoading(false);
     }
-  }, []);
+  }, [soloEnAtencion]);
 
   useEffect(() => {
     loadTramites();
+    return () => { loadAttempt.current += 1; };
   }, [loadTramites]);
 
   const [newTramite, setNewTramite] = useState({
@@ -120,6 +131,7 @@ const Tramites = () => {
     poliza: '',
     fecha: '',
     status: 'verde',
+    estado: 'en_atencion',
   });
 
   const [editTramite, setEditTramite] = useState({
@@ -131,6 +143,7 @@ const Tramites = () => {
     poliza: '',
     fecha: '',
     status: '',
+    estado: '',
   });
 
   const getStatusConfig = (status) => {
@@ -184,6 +197,7 @@ const Tramites = () => {
           poliza_referencia: newTramite.poliza || null,
           fecha_alta: newTramite.fecha || null,
           semaforo: newTramite.status,
+          ...(estadoDisponible ? { estado: newTramite.estado } : {}),
         }),
       });
       const json = await res.json();
@@ -197,6 +211,7 @@ const Tramites = () => {
         poliza: '',
         fecha: '',
         status: 'verde',
+        estado: 'en_atencion',
       });
       loadTramites();
     } catch (err) {
@@ -215,6 +230,7 @@ const Tramites = () => {
       poliza: item.poliza === '—' ? '' : item.poliza,
       fecha: item.fecha,
       status: item.status,
+      estado: item.estado,
     });
     setIsEditModalOpen(true);
   };
@@ -233,6 +249,7 @@ const Tramites = () => {
           poliza_referencia: editTramite.poliza || null,
           fecha_alta: editTramite.fecha || null,
           semaforo: editTramite.status,
+          ...(estadoDisponible && editTramite.estado ? { estado: editTramite.estado } : {}),
         }),
       });
       const json = await res.json();
@@ -291,6 +308,8 @@ const Tramites = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [itemsPerPage, searchTerm, filterStatus]);
+
+  const exportController = useRecordExport('tramites', { q: searchTerm, semaforo: filterStatus, ...(soloEnAtencion ? { estado: 'en_atencion' } : {}) }, paginatedData.map(item => item.id), loading);
 
   return (
     <div className="tramites-container">
@@ -362,6 +381,7 @@ const Tramites = () => {
             </div>
 
             <div className="tramites-tools-wrapper">
+              {soloEnAtencion && <button type="button" className="tramites-btn-export" onClick={() => setSoloEnAtencion(false)}>En atención · Ver todos</button>}
               <div className="tramites-filter-group">
                 <FiFilter className="tramites-filter-icon" />
                 <select
@@ -376,10 +396,7 @@ const Tramites = () => {
                 </select>
               </div>
 
-              <button type="button" className="tramites-btn-export" disabled title="Pendiente exportar">
-                <FiDownload />
-                <span>Exportar</span>
-              </button>
+              <RecordExportTools controller={exportController} buttonClass="tramites-btn-export" />
 
               <button type="button" className="tramites-btn-add" onClick={() => setIsAddModalOpen(true)}>
                 <FiPlus />
@@ -393,7 +410,8 @@ const Tramites = () => {
               <table className="tramites-table">
                 <thead>
                   <tr>
-                    <th>Folio</th>
+
+                    <th style={{ position: 'relative' }}><RecordPageCheckbox controller={exportController} />Folio</th>
                     <th>Etapa</th>
                     <th>Agente</th>
                     <th>Ramo</th>
@@ -414,7 +432,8 @@ const Tramites = () => {
                         exit={{ opacity: 0, y: -10 }}
                         className="tramites-table-row"
                       >
-                        <td className="tramites-folio-cell">
+                        <td style={{ position: "relative" }} className="tramites-folio-cell">
+                        <RecordRowCheckbox controller={exportController} id={item.id} />
                           <span className="tramites-folio-badge">{item.folio}</span>
                         </td>
                         <td>
@@ -625,6 +644,15 @@ const Tramites = () => {
                       />
                     </div>
                     <div className="tramites-form-group">
+                      <label>Estado de atención</label>
+                      <select value={newTramite.estado} disabled={!estadoDisponible} onChange={e => setNewTramite({ ...newTramite, estado: e.target.value })}>
+                        <option value="en_atencion">En atención</option>
+                        <option value="finalizado">Finalizado</option>
+                        <option value="cancelado">Cancelado</option>
+                      </select>
+                      {!estadoDisponible && <small>Disponible al aplicar la migración de estados.</small>}
+                    </div>
+                    <div className="tramites-form-group">
                       <label>Etapa *</label>
                       <select
                         value={newTramite.etapa}
@@ -743,6 +771,16 @@ const Tramites = () => {
                         value={editTramite.folio}
                         onChange={(e) => setEditTramite({ ...editTramite, folio: e.target.value })}
                       />
+                    </div>
+                    <div className="tramites-form-group">
+                      <label>Estado de atención</label>
+                      <select value={editTramite.estado} disabled={!estadoDisponible} onChange={e => setEditTramite({ ...editTramite, estado: e.target.value })}>
+                        {!editTramite.estado && <option value="">Sin clasificar (histórico)</option>}
+                        <option value="en_atencion">En atención</option>
+                        <option value="finalizado">Finalizado</option>
+                        <option value="cancelado">Cancelado</option>
+                      </select>
+                      {!estadoDisponible && <small>Disponible al aplicar la migración de estados.</small>}
                     </div>
                     <div className="tramites-form-group">
                       <label>Etapa *</label>

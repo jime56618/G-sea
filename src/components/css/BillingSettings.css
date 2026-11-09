@@ -87,6 +87,139 @@
   border: 1px solid #e2e8f0;
 }
 
+.gsea-billing-status-pill--scheduled {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.gsea-billing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gsea-billing-manage-toggle {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #0b1b3d;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gsea-billing-manage-toggle:hover {
+  background: #f0f7ff;
+  border-color: #00529b;
+  color: #00529b;
+}
+
+.gsea-billing-manage-toggle--open {
+  background: #f0f7ff;
+  border-color: #00529b;
+  color: #00529b;
+}
+
+/* --- Panel desplegable de Administración de Suscripción --- */
+.gsea-billing-manage-panel {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.gsea-billing-manage-content {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gsea-billing-manage-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+}
+
+.gsea-billing-manage-text strong {
+  font-size: 0.92rem;
+  color: #0b1b3d;
+}
+
+.gsea-billing-manage-text p {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.gsea-billing-manage-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gsea-billing-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gsea-billing-manage-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gsea-billing-manage-btn--primary {
+  background: #00529b;
+  border: 1px solid #00529b;
+  color: #ffffff;
+}
+
+.gsea-billing-manage-btn--primary:hover:not(:disabled) {
+  background: #003e75;
+  border-color: #003e75;
+}
+
+.gsea-billing-manage-btn--secondary {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0b1b3d;
+}
+
+.gsea-billing-manage-btn--secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.gsea-billing-manage-btn--danger {
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.gsea-billing-manage-btn--danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
 /* --- Metricas y fechas de suscripción --- */
 .gsea-billing-details-grid {
   display: grid;
@@ -691,6 +824,14 @@
 
 .gsea-modal-btn-confirm:hover:not(:disabled) {
   background: #003e75;
+}
+
+.gsea-modal-btn-confirm--danger {
+  background: #dc2626;
+}
+
+.gsea-modal-btn-confirm--danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
 .gsea-modal-btn-confirm:disabled {

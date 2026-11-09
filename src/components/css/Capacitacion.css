@@ -34,11 +34,11 @@ body {
 }
 
 .capacitacion-main.sidebar-expanded {
-  margin-left: 260px;
+  margin-left: 0;
 }
 
 .capacitacion-main.sidebar-collapsed {
-  margin-left: 80px;
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {

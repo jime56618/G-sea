@@ -339,7 +339,11 @@
     width: min(248px, 82vw) !important;
   }
 
-  .gsea-sidebar-spacer {
+  .gsea-sidebar.is-expanded + .gsea-sidebar-spacer {
+    margin-left: min(248px, 82vw) !important;
+  }
+
+  .gsea-sidebar.is-collapsed + .gsea-sidebar-spacer {
     margin-left: 72px !important;
   }
 }

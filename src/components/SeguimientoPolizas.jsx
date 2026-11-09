@@ -1,8 +1,11 @@
+import { useRecordExport } from '../utils/useRecordExport';
+import RecordExportTools, { RecordPageCheckbox, RecordRowCheckbox } from './RecordExportTools';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { createPortal } from 'react-dom';
+import { apiFetch } from '../utils/apiClient';
 import {
   Plus,
   FileText,
@@ -19,12 +22,15 @@ import {
   Eye,
   Download,
   Copy,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import './css/SeguimientoPolizas.css';
 import { readModuleCache, writeModuleCache } from '../utils/moduleCache';
+import PolizaQuickCatalogModal from './PolizaQuickCatalogModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const POLIZAS_CACHE_KEY = 'polizas_list';
@@ -99,6 +105,7 @@ const emptyForm = () => ({
   subramo_id: '',
   agente_id: '',
   numero_poliza: '',
+  poliza_anterior_id: '',
   fecha_emision: '',
   inicio_vigencia: '',
   fin_vigencia: '',
@@ -162,6 +169,255 @@ function applyPremiumCalc(prev, patch = {}) {
   };
 }
 
+async function requestPdfAiExtraction(file) {
+  if (!file) throw new Error('No se ha seleccionado ningún archivo.');
+  const isPdf = (file.type && file.type === 'application/pdf') || file.name?.toLowerCase().endsWith('.pdf');
+  if (!isPdf) {
+    throw new Error('El archivo seleccionado no es un documento PDF válido.');
+  }
+  const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_SIZE) {
+    throw new Error('El archivo supera el tamaño máximo permitido de 10 MB.');
+  }
+
+  const formData = new FormData();
+  formData.append('pdf', file);
+
+  try {
+    return await apiFetch('/polizas/extract-pdf', {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (err) {
+    const body = err.body || {};
+    const code = body.code || '';
+
+    if (code === 'pdf_password_protected') {
+      throw new Error(
+        'La póliza está protegida con contraseña. Remueve la contraseña del PDF antes de subirlo.'
+      );
+    }
+    if (code === 'invalid_pdf' || code === 'invalid_pdf_header' || code === 'invalid_pdf_type' || code === 'pdf_parse_error') {
+      throw new Error('El archivo no es un documento PDF válido o está dañado.');
+    }
+    if (code === 'invalid_pdf_size') {
+      throw new Error('El archivo PDF supera el tamaño máximo permitido de 10 MB.');
+    }
+    if (code === 'unreadable_pdf_text') {
+      throw new Error(
+        'El archivo PDF no contiene texto suficiente ni legible para ser procesado por la IA.'
+      );
+    }
+    if (code === 'gemini_rate_limit') {
+      throw new Error(
+        'El servicio de IA ha alcanzado su límite de consultas por minuto. Espera unos segundos y vuelve a intentarlo.'
+      );
+    }
+    if (code === 'gemini_timeout') {
+      throw new Error(
+        'Se agotó el tiempo de espera al procesar la póliza con IA. Intenta con un archivo más ligero o de menos páginas.'
+      );
+    }
+    if (code === 'gemini_connection_error') {
+      throw new Error(
+        'No se pudo conectar con el servicio de IA de Google. Verifica la conexión a internet o inténtalo más tarde.'
+      );
+    }
+    if (code === 'gemini_not_configured' || code === 'gemini_auth_error') {
+      throw new Error(
+        'El servicio de análisis con IA no está configurado correctamente en el servidor.'
+      );
+    }
+    if (code === 'gemini_service_unavailable') {
+      throw new Error(
+        'El servicio de Google Gemini no se encuentra disponible en este momento. Inténtalo más tarde.'
+      );
+    }
+    if (code === 'gemini_http_error') {
+      throw new Error(
+        'Ocurrió un error al comunicarse con el servicio de IA. Inténtalo nuevamente.'
+      );
+    }
+    if (code === 'gemini_invalid_json' || code === 'gemini_empty_response') {
+      throw new Error(
+        'La IA no pudo interpretar los datos de esta carátula. Revisa que el documento corresponda a una póliza de seguros válida.'
+      );
+    }
+    if (code === 'gemini_safety_block') {
+      throw new Error(
+        'El documento no pudo ser analizado debido a restricciones de seguridad del servicio de IA.'
+      );
+    }
+
+    throw new Error(body.message || err.message || 'Error al procesar la póliza con IA.');
+  }
+}
+
+function mapAiFormData(aiForm, catalogos) {
+  const rawNeta = aiForm.prima_neta != null ? String(aiForm.prima_neta) : '';
+  const rawFreq = aiForm.frecuencia_cobro || 'unico';
+
+  const base = applyPremiumCalc({
+    contratante_id: '',
+    aseguradora_id: '',
+    ramo_id: '',
+    subramo_id: '',
+    agente_id: '',
+    numero_poliza: aiForm.numero_poliza || '',
+    poliza_anterior_id: '',
+    fecha_emision: aiForm.fecha_emision ? aiForm.fecha_emision.slice(0, 10) : '',
+    inicio_vigencia: aiForm.inicio_vigencia ? aiForm.inicio_vigencia.slice(0, 10) : '',
+    fin_vigencia: aiForm.fin_vigencia ? aiForm.fin_vigencia.slice(0, 10) : '',
+    prima_neta: rawNeta,
+    moneda: aiForm.moneda || 'MXN',
+    frecuencia_cobro: rawFreq,
+    telefono_notificacion: aiForm.telefono_notificacion || '',
+  }, { prima_neta: rawNeta, frecuencia_cobro: rawFreq });
+
+  if (aiForm.contratante_id && catalogos.contratantes?.some((c) => String(c.id) === String(aiForm.contratante_id))) {
+    base.contratante_id = String(aiForm.contratante_id);
+  }
+
+  if (aiForm.aseguradora_id && catalogos.aseguradoras?.some((a) => String(a.id) === String(aiForm.aseguradora_id))) {
+    base.aseguradora_id = String(aiForm.aseguradora_id);
+  }
+
+  if (aiForm.ramo_id && catalogos.ramos?.some((r) => String(r.id) === String(aiForm.ramo_id))) {
+    base.ramo_id = String(aiForm.ramo_id);
+  }
+
+  if (aiForm.subramo_id && catalogos.subramos?.some((s) => String(s.id) === String(aiForm.subramo_id) && String(s.ramo_id) === String(base.ramo_id))) {
+    base.subramo_id = String(aiForm.subramo_id);
+  }
+
+  if (aiForm.agente_id && catalogos.agentesWorkspace?.some((aw) => String(aw.id) === String(aiForm.agente_id))) {
+    base.agente_id = String(aiForm.agente_id);
+  }
+
+  return base;
+}
+
+function mapAiDetalles(aiDetalles = {}) {
+  const v = aiDetalles.vehiculo || {};
+  const gm = aiDetalles.gastos_medicos || {};
+  const vi = aiDetalles.viaje || {};
+
+  return {
+    vehiculo: {
+      marca: v.marca ?? '',
+      modelo: v.modelo ?? '',
+      anio: v.anio != null ? String(v.anio) : '',
+      serie: v.serie ?? '',
+      placas: v.placas ?? '',
+      motor: v.motor ?? '',
+      pasajeros: v.pasajeros != null ? String(v.pasajeros) : '',
+    },
+    gastos_medicos: {
+      nombre_plan: gm.nombre_plan ?? '',
+      nivel_hospitalario: gm.nivel_hospitalario ?? '',
+      suma_asegurada: gm.suma_asegurada != null ? String(gm.suma_asegurada) : '',
+      suma_asegurada_texto: gm.suma_asegurada_texto ?? '',
+      deducible: gm.deducible != null ? String(gm.deducible) : '',
+      deducible_texto: gm.deducible_texto ?? '',
+      coaseguro_porcentaje: gm.coaseguro_porcentaje != null ? String(gm.coaseguro_porcentaje) : '',
+      tope_coaseguro: gm.tope_coaseguro != null ? String(gm.tope_coaseguro) : '',
+      observaciones: gm.observaciones ?? '',
+    },
+    viaje: {
+      nombre_plan: vi.nombre_plan ?? '',
+      origen: vi.origen ?? '',
+      destino: vi.destino ?? '',
+      fecha_inicio_viaje: vi.fecha_inicio_viaje ?? '',
+      fecha_fin_viaje: vi.fecha_fin_viaje ?? '',
+      observaciones: vi.observaciones ?? '',
+    },
+    asegurados: Array.isArray(aiDetalles.asegurados)
+      ? aiDetalles.asegurados.map((a) => ({
+          nombre: a.nombre ?? '',
+          fecha_nacimiento: a.fecha_nacimiento ?? '',
+          sexo: a.sexo ?? '',
+          parentesco: a.parentesco ?? '',
+          rfc: a.rfc ?? '',
+          curp: a.curp ?? '',
+          antiguedad: a.antiguedad ?? '',
+          titular: a.titular != null ? a.titular : '',
+        }))
+      : [],
+    beneficiarios: Array.isArray(aiDetalles.beneficiarios)
+      ? aiDetalles.beneficiarios.map((b) => ({
+          nombre: b.nombre ?? '',
+          parentesco: b.parentesco ?? '',
+          porcentaje: b.porcentaje != null ? String(b.porcentaje) : '',
+          fecha_nacimiento: b.fecha_nacimiento ?? '',
+        }))
+      : [],
+    coberturas: Array.isArray(aiDetalles.coberturas)
+      ? aiDetalles.coberturas.map((c) => ({
+          nombre: c.nombre ?? '',
+          clave: c.clave ?? '',
+          suma_asegurada: c.suma_asegurada != null ? String(c.suma_asegurada) : '',
+          suma_asegurada_texto: c.suma_asegurada_texto ?? '',
+          deducible: c.deducible != null ? String(c.deducible) : '',
+          deducible_texto: c.deducible_texto ?? '',
+          coaseguro_porcentaje: c.coaseguro_porcentaje != null ? String(c.coaseguro_porcentaje) : '',
+          prima: c.prima != null ? String(c.prima) : '',
+          moneda: c.moneda ?? '',
+          observaciones: c.observaciones ?? '',
+        }))
+      : [],
+  };
+}
+
+function collectAiWarnings(aiResult, computedForm) {
+  const warnings = [...(aiResult.warnings || [])];
+  const detected = aiResult.detected || {};
+  const aiForm = aiResult.form_data || {};
+
+  if (!computedForm.contratante_id && detected.contratante?.nombre) {
+    const msg = `Contratante detectado («${detected.contratante.nombre}»): no coincidió exactamente. Selecciónalo en la lista o regístralo si es nuevo.`;
+    if (!warnings.some((w) => w.includes(detected.contratante.nombre))) {
+      warnings.push(msg);
+    }
+  }
+
+  if (!computedForm.aseguradora_id && detected.aseguradora_nombre) {
+    const msg = `Aseguradora detectada («${detected.aseguradora_nombre}»): selecciónala manualmente del catálogo.`;
+    if (!warnings.some((w) => w.includes(detected.aseguradora_nombre))) {
+      warnings.push(msg);
+    }
+  }
+
+  if (!computedForm.agente_id && detected.agente?.nombre) {
+    const msg = `Agente detectado («${detected.agente.nombre}»): asígnalo manualmente si corresponde a un agente de tu promotoría.`;
+    if (!warnings.some((w) => w.includes(detected.agente.nombre))) {
+      warnings.push(msg);
+    }
+  }
+
+  if (aiForm.iva != null && computedForm.iva) {
+    const diff = Math.abs(Number(aiForm.iva) - Number(computedForm.iva));
+    if (diff > 0.5) {
+      warnings.push(`El IVA calculado por el sistema (${computedForm.iva}) difiere del detectado en el PDF (${Number(aiForm.iva).toFixed(2)}). Revisa el importe.`);
+    }
+  }
+
+  if (aiForm.prima_total != null && computedForm.prima_total) {
+    const diff = Math.abs(Number(aiForm.prima_total) - Number(computedForm.prima_total));
+    if (diff > 0.5) {
+      warnings.push(`La prima total calculada (${computedForm.prima_total}) difiere de la detectada en el PDF (${Number(aiForm.prima_total).toFixed(2)}). Revisa los importes.`);
+    }
+  }
+
+  if (aiForm.monto_cuota != null && computedForm.monto_cuota) {
+    const diff = Math.abs(Number(aiForm.monto_cuota) - Number(computedForm.monto_cuota));
+    if (diff > 0.5) {
+      warnings.push(`El monto por cuota calculado (${computedForm.monto_cuota}) difiere del detectado en el PDF (${Number(aiForm.monto_cuota).toFixed(2)}).`);
+    }
+  }
+
+  return warnings;
+}
+
 const SeguimientoPolizas = () => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const cachedPolizas = useMemo(() => readModuleCache(POLIZAS_CACHE_KEY), []);
@@ -195,6 +451,7 @@ const SeguimientoPolizas = () => {
   }, [location, navigate]);
   const [modalType, setModalType] = useState(() => location.state?.dashboardCreate && can('polizas.manage') && can('polizas.view') ? 'add' : null);
   const [selectedPoliza, setSelectedPoliza] = useState(null);
+  const [aiExtractionResult, setAiExtractionResult] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
@@ -215,6 +472,9 @@ const SeguimientoPolizas = () => {
       }
   );
   const [catalogosReady, setCatalogosReady] = useState(Boolean(cachedCatalogos?.contratantes));
+  const [renovacionDisponible, setRenovacionDisponible] = useState(false);
+  const catalogosAltaRevalidados = useRef(false);
+  const catalogosEdicionRevalidados = useRef(null);
 
   const loadCatalogos = useCallback(async () => {
     const [contratantes, aseguradoras, ramos, subramos, agentesWorkspace] = await Promise.all([
@@ -230,12 +490,53 @@ const SeguimientoPolizas = () => {
     setCatalogosReady(true);
   }, []);
 
+  const handleClearAiData = useCallback(() => {
+    setAiExtractionResult(null);
+  }, []);
+
+  const handleAiExtractedFromUpload = useCallback((result) => {
+    setAiExtractionResult(result);
+    setSelectedPoliza(null);
+    setModalType('add');
+  }, []);
+
+  const handleUpdateCatalogos = useCallback((catType, item) => {
+    setCatalogos((prev) => {
+      const next = { ...prev };
+      if (catType === 'contratante') {
+        if (!next.contratantes.some((c) => c.id === item.id)) {
+          next.contratantes = [item, ...next.contratantes];
+        }
+      } else if (catType === 'agente') {
+        if (!next.agentesWorkspace.some((a) => a.id === item.id)) {
+          next.agentesWorkspace = [item, ...next.agentesWorkspace];
+        }
+      } else if (catType === 'aseguradora') {
+        if (!next.aseguradoras.some((a) => a.id === item.id)) {
+          next.aseguradoras = [item, ...next.aseguradoras];
+        }
+      } else if (catType === 'ramo') {
+        if (!next.ramos.some((r) => r.id === item.id)) {
+          next.ramos = [item, ...next.ramos];
+        }
+      } else if (catType === 'subramo') {
+        if (!next.subramos.some((s) => s.id === item.id)) {
+          next.subramos = [item, ...next.subramos];
+        }
+      }
+      writeModuleCache(CATALOGOS_CACHE_KEY, next);
+      return next;
+    });
+    loadCatalogos().catch(() => {});
+  }, [loadCatalogos]);
+
   const loadPolizas = useCallback(async () => {
     if (!cachedPolizas) setLoading(true);
     setListError('');
     try {
       const json = await fetchJson(`${API_URL}/polizas?per_page=200`);
       const rows = (json.data || []).map(mapPolizaFromApi);
+      setRenovacionDisponible(json.renovacion_disponible === true);
       setPolizas(rows);
       writeModuleCache(POLIZAS_CACHE_KEY, rows);
     } catch (e) {
@@ -251,10 +552,26 @@ const SeguimientoPolizas = () => {
   }, [loadPolizas]);
 
   useEffect(() => {
+    if (modalType !== 'edit') catalogosEdicionRevalidados.current = null;
+    if (modalType === 'edit') {
+      if (catalogosEdicionRevalidados.current !== selectedPoliza?.id) {
+        catalogosEdicionRevalidados.current = selectedPoliza?.id;
+        loadCatalogos().catch(() => {});
+      }
+      return;
+    }
+    if (modalType === 'add' || modalType === 'upload') {
+      if (!catalogosAltaRevalidados.current) {
+        catalogosAltaRevalidados.current = true;
+        loadCatalogos().catch(() => {});
+      }
+      return;
+    }
+    catalogosAltaRevalidados.current = false;
     if (!modalType || modalType === 'delete') return;
     if (catalogosReady && catalogos.contratantes?.length) return;
     loadCatalogos().catch(() => {});
-  }, [modalType, catalogosReady, catalogos.contratantes?.length, loadCatalogos]);
+  }, [modalType, selectedPoliza?.id, catalogosReady, catalogos.contratantes?.length, loadCatalogos]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -347,6 +664,10 @@ const SeguimientoPolizas = () => {
     }
   };
 
+  const exportToday = new Date();
+  const exportDate = [exportToday.getFullYear(), String(exportToday.getMonth() + 1).padStart(2, '0'), String(exportToday.getDate()).padStart(2, '0')].join('-');
+  const exportController = useRecordExport('polizas', { q: searchTerm, estatus: filterEstatus, vencidas: dashboardAlertFilter === 'vencidas', hoy: exportDate, tz_offset: exportToday.getTimezoneOffset() }, paginatedPolizas.map(item => item.id), loading);
+
   return (
     <div className="polizas-container">
       <Sidebar onExpand={setIsSidebarExpanded} />
@@ -370,6 +691,7 @@ const SeguimientoPolizas = () => {
             </div>
 
             <div className="polizas-header-actions">
+              <RecordExportTools controller={exportController} buttonClass="polizas-btn-upload" />
               <button
                 type="button"
                 onClick={() => {
@@ -430,13 +752,13 @@ const SeguimientoPolizas = () => {
               </select>
             </div>
           </div>
-
           <div className="polizas-table-container">
             <div className="polizas-table-wrapper">
               <table className="polizas-table">
                 <thead>
                   <tr>
-                    <th>Número de Póliza</th>
+
+                    <th style={{ position: 'relative' }}><RecordPageCheckbox controller={exportController} />Número de Póliza</th>
                     <th>Aseguradora</th>
                     <th>Contratante</th>
                     <th className="text-center">Archivo</th>
@@ -454,7 +776,8 @@ const SeguimientoPolizas = () => {
                         className="polizas-row"
                         style={{ animationDelay: `${index * 0.05}s` }}
                       >
-                        <td className="polizas-cell polizas-cell-numero">
+                        <td style={{ position: "relative" }} className="polizas-cell polizas-cell-numero">
+                        <RecordRowCheckbox controller={exportController} id={poliza.id} />
                           <span className="polizas-badge">{poliza.numero}</span>
                         </td>
                         <td className="polizas-cell polizas-cell-aseguradora">
@@ -606,16 +929,23 @@ const SeguimientoPolizas = () => {
 
       {modalType && (
         <ModalManager
+          renovacionDisponible={renovacionDisponible}
           type={modalType}
           data={selectedPoliza}
           catalogos={catalogos}
+          onUpdateCatalogos={handleUpdateCatalogos}
+          initialAiData={aiExtractionResult}
+          onClearAiData={handleClearAiData}
+          onAiExtractedFromUpload={handleAiExtractedFromUpload}
           onClose={() => {
             setModalType(null);
             setSelectedPoliza(null);
+            setAiExtractionResult(null);
           }}
           onSaved={(kind) => {
             setModalType(null);
             setSelectedPoliza(null);
+            setAiExtractionResult(null);
             loadPolizas();
             showSuccess(
               kind === 'edit'
@@ -671,15 +1001,357 @@ function agentesFiltradosPorAseguradora(agentesWorkspace, aseguradoraId) {
   );
 }
 
-const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm }) => {
-  const isEdit = type === 'edit' && data?.raw;
+// Campos adicionales del alta. Las claves corresponden al contrato de Laravel.
+const detalleFields = {
+  vehiculo: [
+    ['marca', 'Marca'], ['modelo', 'Modelo'], ['anio', 'Año', 'number', 1900, 2100, 1],
+    ['serie', 'Serie'], ['placas', 'Placas', 'text', 50], ['motor', 'Motor'],
+    ['pasajeros', 'Pasajeros', 'number', 0, undefined, 1],
+  ],
+  asegurados: [
+    ['nombre', 'Nombre *'], ['fecha_nacimiento', 'Fecha de nacimiento', 'date'],
+    ['sexo', 'Sexo', 'text', 30], ['parentesco', 'Parentesco', 'text', 100],
+    ['rfc', 'RFC', 'text', 20], ['curp', 'CURP', 'text', 20],
+    ['antiguedad', 'Antigüedad', 'date'], ['titular', 'Titular', 'boolean'],
+  ],
+  beneficiarios: [
+    ['nombre', 'Nombre *'], ['parentesco', 'Parentesco', 'text', 100],
+    ['porcentaje', 'Porcentaje', 'number', 0, 100],
+    ['fecha_nacimiento', 'Fecha de nacimiento', 'date'],
+  ],
+  coberturas: [
+    ['nombre', 'Nombre *'], ['clave', 'Clave', 'text', 100],
+    ['suma_asegurada', 'Suma asegurada', 'number', 0], ['suma_asegurada_texto', 'Suma asegurada (texto)'],
+    ['deducible', 'Deducible', 'number', 0], ['deducible_texto', 'Deducible (texto)'],
+    ['coaseguro_porcentaje', 'Coaseguro (%)', 'number', 0, 100], ['prima', 'Prima de cobertura', 'number', 0],
+    ['moneda', 'Moneda', 'text', 10], ['observaciones', 'Observaciones', 'text', null],
+  ],
+  gastos_medicos: [
+    ['nombre_plan', 'Plan'], ['nivel_hospitalario', 'Nivel hospitalario'],
+    ['suma_asegurada', 'Suma asegurada', 'number', 0], ['suma_asegurada_texto', 'Suma asegurada (texto)'],
+    ['deducible', 'Deducible', 'number', 0], ['deducible_texto', 'Deducible (texto)'],
+    ['coaseguro_porcentaje', 'Coaseguro (%)', 'number', 0, 100],
+    ['tope_coaseguro', 'Tope de coaseguro', 'number', 0], ['observaciones', 'Observaciones', 'text', null],
+  ],
+  viaje: [
+    ['nombre_plan', 'Plan'], ['origen', 'Origen'], ['destino', 'Destino'],
+    ['fecha_inicio_viaje', 'Inicio del viaje', 'date'], ['fecha_fin_viaje', 'Fin del viaje', 'date'],
+    ['observaciones', 'Observaciones', 'text', null],
+  ],
+};
+
+const emptyDetalles = () => ({ vehiculo: {}, gastos_medicos: {}, viaje: {}, asegurados: [], beneficiarios: [], coberturas: [] });
+
+function tipoPolizaAlta(formData, catalogos) {
+  const ramo = catalogos.ramos.find((r) => String(r.id) === String(formData.ramo_id));
+  const subramo = catalogos.subramos.find((s) => String(s.id) === String(formData.subramo_id));
+  if (subramo && String(subramo.ramo_id) !== String(formData.ramo_id)) return null;
+  const nombre = (subramo?.nombre || ramo?.nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Coincidencias explícitas: VEHÍCULOS y ACCIDENTES Y ENFERMEDADES son demasiado generales.
+  if (nombre === 'automoviles') return 'auto';
+  if (nombre === 'motocicletas') return 'moto';
+  if (nombre === 'vida') return 'vida';
+  if (nombre === 'danos empresariales') return 'danos';
+  if (['gastos medicos', 'gastos medicos mayores'].includes(nombre)) return 'medicos';
+  if (nombre === 'accidentes personales') return 'accidentes';
+  if (['viajes', 'seguro de viaje', 'seguro de viajes'].includes(nombre)) return 'viaje';
+  return null;
+}
+
+function fieldsPorTipo(group, tipo) {
+  const keys = tipo === 'moto' && group === 'vehiculo'
+    ? ['marca', 'modelo', 'anio', 'serie', 'placas', 'motor']
+    : tipo === 'vida' && group === 'asegurados'
+      ? ['nombre', 'fecha_nacimiento', 'sexo', 'parentesco', 'rfc', 'curp']
+      : tipo === 'vida' && group === 'coberturas'
+        ? ['nombre', 'suma_asegurada', 'prima', 'observaciones']
+        : tipo === 'danos' && group === 'coberturas'
+          ? ['nombre', 'suma_asegurada', 'deducible', 'coaseguro_porcentaje', 'prima', 'observaciones']
+          : null;
+  return keys ? detalleFields[group].filter(([key]) => keys.includes(key)) : detalleFields[group];
+}
+
+function buildDetallesPayload(tipo, detalles) {
+  const groups = ['auto', 'moto'].includes(tipo) ? ['vehiculo', 'coberturas']
+    : tipo === 'medicos' ? ['gastos_medicos', 'asegurados', 'coberturas', 'beneficiarios']
+      : ['accidentes', 'vida'].includes(tipo) ? ['asegurados', 'beneficiarios', 'coberturas']
+        : tipo === 'viaje' ? ['viaje', 'asegurados', 'beneficiarios', 'coberturas']
+          : tipo === 'danos' ? ['coberturas'] : [];
+  const clean = (group, item) => {
+    const result = {};
+    for (const [key, , fieldType] of fieldsPorTipo(group, tipo)) {
+      const raw = item[key];
+      const value = typeof raw === 'string' ? raw.trim() : raw;
+      if (value === '' || value == null) continue;
+      if (fieldType === 'number') {
+        const number = Number(value);
+        if (!Number.isFinite(number)) throw new Error('Revisa los importes de los datos adicionales.');
+        result[key] = number;
+      } else result[key] = value;
+    }
+    return result;
+  };
+  const payload = {};
+  for (const group of groups) {
+    if (Array.isArray(detalles[group])) {
+      const rows = detalles[group].map((item) => clean(group, item));
+      if (rows.some((row) => !row.nombre)) throw new Error('Captura el nombre de cada asegurado, beneficiario y cobertura agregados.');
+      if (rows.length) payload[group] = rows;
+    } else {
+      const item = clean(group, detalles[group]);
+      if (Object.keys(item).length) payload[group] = item;
+    }
+  }
+  return payload;
+}
+
+const detalleRelations = { vehiculo: 'vehiculo', asegurados: 'asegurados', beneficiarios: 'beneficiarios', coberturas: 'coberturas', gastos_medicos: 'gastos_medicos', viaje: 'viaje' };
+
+function relacionesCompletas(poliza) {
+  return Boolean(poliza) && Object.values(detalleRelations).every((key) => Object.hasOwn(poliza, key));
+}
+
+function precargarDetalles(poliza) {
+  const result = emptyDetalles();
+  for (const [group, relation] of Object.entries(detalleRelations)) {
+    const fields = [...detalleFields[group]];
+    if (group === 'coberturas') fields.push(['orden', '', 'number']);
+    if (group === 'beneficiarios') fields.push(['asegurado_id', '', 'number']);
+    const normalize = (row) => Object.fromEntries(fields.filter(([key]) => Object.hasOwn(row, key)).map(([key, , fieldType]) => {
+      const raw = row[key];
+      const value = raw == null ? null : fieldType === 'date' ? String(raw).slice(0, 10)
+        : fieldType === 'number' ? Number(raw) : fieldType === 'boolean' ? Boolean(Number(raw)) : raw;
+      return [key, value];
+    }));
+    result[group] = Array.isArray(result[group]) ? (poliza[relation] || []).map(normalize) : normalize(poliza[relation] || {});
+  }
+  return result;
+}
+
+function buildDetallesEdicion(detalles, originales) {
+  const payload = {};
+  for (const group of Object.keys(detalleRelations)) {
+    if (JSON.stringify(detalles[group]) === JSON.stringify(originales[group])) continue;
+    if (group === 'asegurados' && originales.beneficiarios.some((row) => row.asegurado_id != null)) {
+      throw new Error('No se pueden modificar asegurados con beneficiarios vinculados: se perderían sus asociaciones.');
+    }
+    // Conserva todos los campos validados, también los que no aparecen en este subramo.
+    const fields = [...detalleFields[group]];
+    if (group === 'coberturas') fields.push(['orden', '', 'number']);
+    if (group === 'beneficiarios') fields.push(['asegurado_id', '', 'number']);
+    const clean = (row) => Object.fromEntries(fields.filter(([key]) => Object.hasOwn(row, key)).map(([key, , fieldType]) => {
+      const raw = row[key];
+      const value = typeof raw === 'string' ? raw.trim() : raw;
+      if (fieldType === 'number' && value !== '' && value != null && !Number.isFinite(Number(value))) throw new Error('Revisa los importes de los datos adicionales.');
+      return [key, value === '' || value == null ? null : fieldType === 'number' ? Number(value) : value];
+    }));
+    const value = Array.isArray(detalles[group]) ? detalles[group].map(clean) : clean(detalles[group]);
+    if (Array.isArray(value) && value.some((row) => !row.nombre)) throw new Error('Captura el nombre de cada asegurado, beneficiario y cobertura agregados.');
+    if (group === 'vehiculo' && Object.entries(value).some(([key, v]) => v === null && originales.vehiculo[key] != null)) {
+      throw new Error('El backend no permite vaciar campos existentes del vehículo. Captura un valor válido.');
+    }
+    payload[group] = value;
+  }
+  return payload;
+}
+
+function DetalleInputs({ group, tipo, value, onChange, disabled = false }) {
+  return fieldsPorTipo(group, tipo).map(([key, label, fieldType = 'text', min, max, step]) => (
+    <div className="polizas-form-group" key={key}>
+      <label>{label}</label>
+      {fieldType === 'boolean' ? (
+        <select disabled={disabled} value={value[key] == null ? '' : String(value[key])} onChange={(e) => onChange(key, e.target.value === '' ? '' : e.target.value === 'true')}>
+          <option value="">Selecciona…</option><option value="true">Sí</option><option value="false">No</option>
+        </select>
+      ) : (
+        <input
+          type={fieldType}
+          disabled={disabled}
+          value={value[key] ?? ''}
+          required={key === 'nombre'}
+          maxLength={fieldType === 'text' ? (min === null ? undefined : min ?? 255) : undefined}
+          min={fieldType === 'number' ? min : key === 'fecha_fin_viaje' ? value.fecha_inicio_viaje || undefined : undefined}
+          max={fieldType === 'number' ? max : undefined}
+          step={fieldType === 'number' ? step ?? '0.01' : undefined}
+          onChange={(e) => onChange(key, e.target.value)}
+        />
+      )}
+    </div>
+  ));
+}
+
+const ModalManager = ({
+  type,
+  data,
+  catalogos,
+  onUpdateCatalogos,
+  renovacionDisponible,
+  initialAiData,
+  onClearAiData,
+  onAiExtractedFromUpload,
+  onClose,
+  onSaved,
+  onDeleteConfirm,
+}) => {
+  const { can } = useAuth();
+  const isEdit = type === 'edit';
   const isDrawer = type === 'add' || type === 'edit';
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [formData, setFormData] = useState(() => emptyForm());
+  const [detalles, setDetalles] = useState(emptyDetalles);
+  const [cargaDetalles, setCargaDetalles] = useState({ id: null, originales: null, error: '' });
+  const detallesListos = !isEdit || (cargaDetalles.id === data?.id && Boolean(cargaDetalles.originales));
+  const aseguradosProtegidos = isEdit && Boolean(cargaDetalles.originales?.beneficiarios.some((row) => row.asegurado_id != null));
+  const tipoAlta = isDrawer ? tipoPolizaAlta(formData, catalogos) : null;
+
+  // Estados y referencias para IA y Subida
+  const skipDetallesResetRef = useRef(false);
+  const drawerFileInputRef = useRef(null);
+  const uploadInputRef = useRef(null);
+  const [analyzingAi, setAnalyzingAi] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [drawerAiError, setDrawerAiError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [aiWarnings, setAiWarnings] = useState([]);
+  const [aiDetectedData, setAiDetectedData] = useState(() => initialAiData?.detected || null);
+
+  // Estado para modal de búsqueda / registro rápido de catálogos
+  const [quickCatalog, setQuickCatalog] = useState({
+    isOpen: false,
+    mode: 'search',
+    catalogType: 'contratante',
+    initialData: {},
+  });
+
+  const handleOpenQuickCatalog = useCallback((catType, m = 'search', customData = null) => {
+    let data = customData;
+    if (!data && aiDetectedData) {
+      if (catType === 'contratante') data = aiDetectedData.contratante;
+      else if (catType === 'agente') data = aiDetectedData.agente;
+      else if (catType === 'aseguradora') data = { nombre: aiDetectedData.aseguradora_nombre };
+      else if (catType === 'ramo') data = { nombre: aiDetectedData.ramo_nombre };
+      else if (catType === 'subramo') data = { nombre: aiDetectedData.subramo_nombre };
+    }
+    setQuickCatalog({
+      isOpen: true,
+      mode: m,
+      catalogType: catType,
+      initialData: data || {},
+    });
+  }, [aiDetectedData]);
+
+  const handleCatalogItemSelect = useCallback((catType, item) => {
+    if (!item) return;
+
+    if (onUpdateCatalogos) {
+      onUpdateCatalogos(catType, item);
+    }
+
+    if (catType === 'contratante') {
+      setFormData((prev) => ({ ...prev, contratante_id: String(item.id) }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('contratante')));
+    } else if (catType === 'aseguradora') {
+      setFormData((prev) => ({ ...prev, aseguradora_id: String(item.id) }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('aseguradora')));
+    } else if (catType === 'ramo') {
+      skipDetallesResetRef.current = true;
+      setFormData((prev) => ({ ...prev, ramo_id: String(item.id), subramo_id: '' }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('ramo')));
+    } else if (catType === 'subramo') {
+      skipDetallesResetRef.current = true;
+      setFormData((prev) => ({
+        ...prev,
+        ramo_id: String(item.ramo_id),
+        subramo_id: String(item.id),
+      }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('subramo')));
+    } else if (catType === 'agente') {
+      setFormData((prev) => ({ ...prev, agente_id: String(item.id) }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('agente')));
+    }
+  }, [onUpdateCatalogos]);
+
+  const applyExtractedAiResult = useCallback((aiResult) => {
+    skipDetallesResetRef.current = true;
+    const newForm = mapAiFormData(aiResult.form_data || {}, catalogos);
+    const newDetalles = mapAiDetalles(aiResult.detalles || {});
+    setFormData((prev) => ({
+      ...prev,
+      ...newForm,
+      poliza_anterior_id: prev.poliza_anterior_id || '',
+    }));
+    setDetalles(newDetalles);
+    const w = collectAiWarnings(aiResult, newForm);
+    setAiWarnings(w);
+    setAiDetectedData(aiResult.detected || null);
+    setDrawerAiError('');
+  }, [catalogos]);
 
   useEffect(() => {
-    if (type === 'edit' && data?.raw) {
+    if (type !== 'edit') return;
+    let active = true;
+    setCargaDetalles({ id: data?.id, originales: null, error: '' });
+    const load = async () => {
+      try {
+        const poliza = relacionesCompletas(data?.raw) ? data.raw : await fetchJson(`${API_URL}/polizas/${data.id}`);
+        if (!relacionesCompletas(poliza)) throw new Error('La API no devolvió todas las relaciones de la póliza.');
+        const next = precargarDetalles(poliza);
+        if (!active) return;
+        setDetalles(next);
+        setCargaDetalles({ id: data.id, originales: next, error: '' });
+      } catch (error) {
+        if (active) setCargaDetalles({ id: data?.id, originales: null, error: error.message || 'No se pudieron cargar los detalles.' });
+      }
+    };
+    load();
+    return () => { active = false; };
+  }, [type, data]);
+
+  const appliedAiDataRef = useRef(null);
+  const initializedEditIdRef = useRef(null);
+  const prevRamoRef = useRef(formData.ramo_id);
+  const prevSubramoRef = useRef(formData.subramo_id);
+
+  // Evita trasladar información capturada a otro ramo o subramo manualmente, pero respeta la extracción de IA
+  useEffect(() => {
+    const prevRamo = prevRamoRef.current;
+    const prevSubramo = prevSubramoRef.current;
+    prevRamoRef.current = formData.ramo_id;
+    prevSubramoRef.current = formData.subramo_id;
+
+    if (skipDetallesResetRef.current) {
+      skipDetallesResetRef.current = false;
+      return;
+    }
+    // Si no había ramo previo (primera selección o autocompletado), no borrar detalles
+    if (!prevRamo) {
+      return;
+    }
+    // Si el ramo no cambió y solo cambió el subramo dentro del mismo ramo, no borrar detalles
+    if (prevRamo === formData.ramo_id && prevSubramo !== formData.subramo_id) {
+      return;
+    }
+    // Si hay datos detectados por IA en detalles (vehículo, asegurados, coberturas, etc.), no borrarlos
+    const hasAiDetalles =
+      (detalles.vehiculo && Object.values(detalles.vehiculo).some(Boolean)) ||
+      (detalles.coberturas && detalles.coberturas.length > 0) ||
+      (detalles.asegurados && detalles.asegurados.length > 0) ||
+      (detalles.viaje && Object.values(detalles.viaje).some(Boolean)) ||
+      (detalles.gastos_medicos && Object.values(detalles.gastos_medicos).some(Boolean));
+    if (hasAiDetalles && aiDetectedData) {
+      return;
+    }
+
+    if (type === 'add' && prevRamo !== formData.ramo_id) {
+      setDetalles(emptyDetalles());
+    }
+  }, [type, formData.ramo_id, formData.subramo_id, aiDetectedData, detalles]);
+
+  // Inicialización de datos de edición (solo cuando cambia la póliza seleccionada)
+  useEffect(() => {
+    if (type === 'edit' && data?.raw && initializedEditIdRef.current !== data.id) {
+      initializedEditIdRef.current = data.id;
       const p = data.raw;
       setFormData(
         applyPremiumCalc({
@@ -701,11 +1373,28 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
           telefono_notificacion: p.telefono_notificacion || '',
         })
       );
-    } else if (type === 'add') {
-      setFormData(emptyForm());
+      setAiWarnings([]);
+      setAiDetectedData(null);
     }
+  }, [type, data?.id, data?.raw]);
+
+  // Aplicación única de datos de extracción IA en alta (sin reiniciar en re-renders posteriores ni al actualizar catálogos)
+  useEffect(() => {
+    if (type === 'add' && initialAiData && appliedAiDataRef.current !== initialAiData) {
+      appliedAiDataRef.current = initialAiData;
+      skipDetallesResetRef.current = true;
+      applyExtractedAiResult(initialAiData);
+      setAiDetectedData(initialAiData.detected || null);
+      if (onClearAiData) onClearAiData();
+    }
+  }, [type, initialAiData, applyExtractedAiResult, onClearAiData]);
+
+  // Limpieza de mensajes de error al cambiar de tipo de modal
+  useEffect(() => {
     setErr('');
-  }, [type, data]);
+    setDrawerAiError('');
+    setUploadError('');
+  }, [type]);
 
   const subramosFiltrados = useMemo(() => {
     if (!formData.ramo_id) return catalogos.subramos;
@@ -729,6 +1418,9 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
       moneda: formData.moneda || 'MXN',
     };
     if (formData.fecha_emision) payload.fecha_emision = formData.fecha_emision;
+    if (type === 'add' && renovacionDisponible && formData.poliza_anterior_id) {
+      payload.poliza_anterior_id = Number(formData.poliza_anterior_id);
+    }
     if (formData.agente_id) payload.agente_id = Number(formData.agente_id);
     if (formData.prima_neta !== '') payload.prima_neta = Number(formData.prima_neta);
     if (formData.iva !== '') payload.iva = Number(formData.iva);
@@ -740,6 +1432,60 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
     return payload;
   };
 
+  const handleProcessUploadPdf = async (file) => {
+    setUploadError('');
+    if (!file) return;
+    setAnalyzingAi(true);
+    try {
+      const res = await requestPdfAiExtraction(file);
+      if (onAiExtractedFromUpload) {
+        onAiExtractedFromUpload(res);
+      }
+    } catch (ex) {
+      setUploadError(ex.message || 'Error al procesar el archivo.');
+    } finally {
+      setAnalyzingAi(false);
+    }
+  };
+
+  const handleDrawerAiFile = async (file) => {
+    setDrawerAiError('');
+    if (!file) return;
+
+    const hasManualData = Boolean(
+      formData.numero_poliza?.trim() ||
+      formData.contratante_id ||
+      formData.aseguradora_id ||
+      formData.ramo_id ||
+      formData.prima_neta ||
+      (detalles.vehiculo && Object.values(detalles.vehiculo).some(Boolean)) ||
+      (detalles.coberturas && detalles.coberturas.length > 0) ||
+      (detalles.asegurados && detalles.asegurados.length > 0)
+    );
+
+    if (isEdit) {
+      const confirmEdit = window.confirm(
+        '¿Deseas autocompletar la póliza con los datos extraídos de este PDF? Se actualizarán los campos en pantalla (los cambios no se guardarán en la base de datos hasta hacer clic en "Actualizar").'
+      );
+      if (!confirmEdit) return;
+    } else if (hasManualData) {
+      const confirmReplace = window.confirm(
+        'El formulario ya contiene información capturada. ¿Deseas reemplazarla con los datos extraídos del PDF?'
+      );
+      if (!confirmReplace) return;
+    }
+
+    setAnalyzingAi(true);
+    try {
+      const res = await requestPdfAiExtraction(file);
+      applyExtractedAiResult(res);
+    } catch (ex) {
+      setDrawerAiError(ex.message || 'Error al procesar la póliza con IA.');
+    } finally {
+      setAnalyzingAi(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr('');
@@ -749,12 +1495,13 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
       if (type === 'add') {
         await fetchJson(`${API_URL}/polizas`, {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, ...buildDetallesPayload(tipoAlta, detalles) }),
         });
       } else if (type === 'edit' && data?.id) {
+        if (!detallesListos) throw new Error('Espera a que se carguen correctamente los detalles antes de guardar.');
         await fetchJson(`${API_URL}/polizas/${data.id}`, {
           method: 'PUT',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, ...buildDetallesEdicion(detalles, cargaDetalles.originales) }),
         });
       }
       onSaved(type === 'edit' ? 'edit' : 'add');
@@ -824,22 +1571,269 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
               </div>
             </div>
           ) : type === 'upload' ? (
-            <div className="polizas-upload-content">
-              <div className="polizas-upload-area">
-                <UploadCloud size={40} className="polizas-upload-icon" />
-                <p className="polizas-upload-text">Subida de documentos: integrar con POST /api/poliza_documentos</p>
-                <input type="file" accept=".pdf" className="polizas-upload-input" disabled />
+            analyzingAi ? (
+              <div className="polizas-ai-loading-container">
+                <Loader2 size={44} className="polizas-ai-spinner" />
+                <p className="polizas-ai-loading-title">Analizando póliza con inteligencia artificial…</p>
+                <p className="polizas-ai-loading-sub">
+                  Google Gemini está leyendo la carátula para extraer número de póliza, vigencias, primas, coberturas y datos del bien asegurado.
+                </p>
               </div>
-              <button type="button" onClick={onClose} className="polizas-btn-upload-confirm">
-                Cerrar
-              </button>
-            </div>
+            ) : (
+              <div className="polizas-upload-content">
+                {uploadError && (
+                  <div className="polizas-ai-alert-error" role="alert">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertCircle size={18} />
+                      <span>{uploadError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="polizas-ai-alert-close"
+                      onClick={() => setUploadError('')}
+                      aria-label="Cerrar error"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                <div
+                  className={`polizas-upload-area ${isDragging ? 'is-dragging' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) handleProcessUploadPdf(f);
+                  }}
+                  onClick={() => uploadInputRef.current?.click()}
+                  title="Haz clic para seleccionar o arrastra aquí tu póliza PDF"
+                >
+                  <UploadCloud size={44} className="polizas-upload-icon" />
+                  <p className="polizas-upload-text">Arrastra aquí la carátula de la póliza en PDF o haz clic para seleccionar</p>
+                  <p className="polizas-upload-hint">Formatos soportados: PDF hasta 10 MB con texto seleccionable</p>
+                  <input
+                    type="file"
+                    ref={uploadInputRef}
+                    accept=".pdf"
+                    className="polizas-upload-input"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleProcessUploadPdf(f);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+                <div className="polizas-upload-actions">
+                  <button type="button" onClick={onClose} className="polizas-btn-cancel">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )
           ) : (
             <form onSubmit={handleSubmit} className="polizas-form">
+              <div className="polizas-ai-toolbar">
+                <button
+                  type="button"
+                  className="polizas-ai-btn-trigger"
+                  disabled={analyzingAi}
+                  onClick={() => drawerFileInputRef.current?.click()}
+                  title="Sube una carátula en PDF para autocompletar este formulario mediante Gemini"
+                >
+                  {analyzingAi ? (
+                    <>
+                      <Loader2 size={16} className="polizas-ai-spinner" />
+                      <span>Analizando póliza con inteligencia artificial…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} className="polizas-ai-icon-sparkle" />
+                      <span>Autocompletar con IA desde PDF</span>
+                    </>
+                  )}
+                </button>
+                <input
+                  type="file"
+                  ref={drawerFileInputRef}
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleDrawerAiFile(f);
+                    e.target.value = '';
+                  }}
+                />
+                <span className="polizas-ai-toolbar-hint">
+                  Extrae vigencias, primas, coberturas y bien asegurado con Google Gemini
+                </span>
+              </div>
+
+              {drawerAiError && (
+                <div className="polizas-ai-alert-error" role="alert">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertCircle size={18} />
+                    <span>{drawerAiError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="polizas-ai-alert-close"
+                    onClick={() => setDrawerAiError('')}
+                    aria-label="Cerrar error"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {aiWarnings.length > 0 && (
+                <div className="polizas-ai-banner" role="status">
+                  <div className="polizas-ai-banner-header">
+                    <div className="polizas-ai-banner-title">
+                      <Sparkles size={18} className="polizas-ai-icon-sparkle" />
+                      <strong>Información autocompletada con IA (Google Gemini)</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="polizas-ai-alert-close"
+                      onClick={() => setAiWarnings([])}
+                      aria-label="Descartar avisos"
+                      title="Descartar aviso"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <p className="polizas-ai-banner-sub">
+                    Revisa y ajusta los campos autocompletados antes de guardar. Se detectaron los siguientes puntos para atención manual:
+                  </p>
+                  <ul className="polizas-ai-warning-list">
+                    {aiWarnings.map((w, idx) => {
+                      const lower = w.toLowerCase();
+                      const isContratante = lower.includes('contratante');
+                      const isAgente = lower.includes('agente');
+                      const isAseguradora = lower.includes('aseguradora');
+                      const isRamo = lower.includes('ramo') && !lower.includes('subramo');
+                      const isSubramo = lower.includes('subramo');
+
+                      return (
+                        <li key={idx} className="polizas-ai-warning-item">
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%' }}>
+                            <AlertCircle size={14} className="polizas-ai-warning-icon" />
+                            <div style={{ flex: 1 }}>
+                              <span>{w}</span>
+                              {(isContratante || isAgente || isAseguradora || isRamo || isSubramo) && (
+                                <div className="polizas-ai-warning-actions">
+                                  {isContratante && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="polizas-ai-warning-btn"
+                                        onClick={() => handleOpenQuickCatalog('contratante', 'search')}
+                                      >
+                                        <Search size={11} /> Buscar existente
+                                      </button>
+                                      {can('contratantes.manage') && (
+                                        <button
+                                          type="button"
+                                          className="polizas-ai-warning-btn is-primary"
+                                          onClick={() => handleOpenQuickCatalog('contratante', 'create', aiDetectedData?.contratante)}
+                                        >
+                                          <Plus size={11} /> Registrar nuevo
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                  {isAgente && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="polizas-ai-warning-btn"
+                                        onClick={() => handleOpenQuickCatalog('agente', 'search')}
+                                      >
+                                        <Search size={11} /> Buscar existente
+                                      </button>
+                                      {can('agentes.manage') && (
+                                        <button
+                                          type="button"
+                                          className="polizas-ai-warning-btn is-primary"
+                                          onClick={() => handleOpenQuickCatalog('agente', 'create', aiDetectedData?.agente)}
+                                        >
+                                          <Plus size={11} /> Registrar nuevo
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                  {isAseguradora && (
+                                    <button
+                                      type="button"
+                                      className="polizas-ai-warning-btn"
+                                      onClick={() => handleOpenQuickCatalog('aseguradora', 'search')}
+                                    >
+                                      <Search size={11} /> Buscar aseguradora en catálogo
+                                    </button>
+                                  )}
+                                  {isRamo && (
+                                    <button
+                                      type="button"
+                                      className="polizas-ai-warning-btn"
+                                      onClick={() => handleOpenQuickCatalog('ramo', 'search')}
+                                    >
+                                      <Search size={11} /> Buscar ramo en catálogo
+                                    </button>
+                                  )}
+                                  {isSubramo && (
+                                    <button
+                                      type="button"
+                                      className="polizas-ai-warning-btn"
+                                      onClick={() => handleOpenQuickCatalog('subramo', 'search')}
+                                    >
+                                      <Search size={11} /> Buscar subramo en catálogo
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
               {err && <p className="gsea-auth-error">{err}</p>}
 
               <div className="polizas-form-group">
-                <label>Contratante *</label>
+                <div className="polizas-field-label-row">
+                  <label>Contratante *</label>
+                  <div className="polizas-field-actions">
+                    <button
+                      type="button"
+                      className="polizas-field-action-btn"
+                      onClick={() => handleOpenQuickCatalog('contratante', 'search')}
+                      title="Buscar contratante existente"
+                    >
+                      <Search size={11} /> Buscar
+                    </button>
+                    {can('contratantes.manage') && (
+                      <button
+                        type="button"
+                        className="polizas-field-action-btn is-create"
+                        onClick={() => handleOpenQuickCatalog('contratante', 'create', aiDetectedData?.contratante)}
+                        title="Registrar nuevo contratante"
+                      >
+                        <Plus size={11} /> Agregar
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <select
                   required
                   value={formData.contratante_id}
@@ -855,7 +1849,19 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
               </div>
 
               <div className="polizas-form-group">
-                <label>Aseguradora *</label>
+                <div className="polizas-field-label-row">
+                  <label>Aseguradora *</label>
+                  <div className="polizas-field-actions">
+                    <button
+                      type="button"
+                      className="polizas-field-action-btn"
+                      onClick={() => handleOpenQuickCatalog('aseguradora', 'search')}
+                      title="Buscar aseguradora en catálogo"
+                    >
+                      <Search size={11} /> Buscar
+                    </button>
+                  </div>
+                </div>
                 <select
                   required
                   value={formData.aseguradora_id}
@@ -878,7 +1884,19 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
 
               <div className="polizas-form-row">
                 <div className="polizas-form-group">
-                  <label>Ramo *</label>
+                  <div className="polizas-field-label-row">
+                    <label>Ramo *</label>
+                    <div className="polizas-field-actions">
+                      <button
+                        type="button"
+                        className="polizas-field-action-btn"
+                        onClick={() => handleOpenQuickCatalog('ramo', 'search')}
+                        title="Buscar ramo en catálogo"
+                      >
+                        <Search size={11} /> Buscar
+                      </button>
+                    </div>
+                  </div>
                   <select
                     required
                     value={formData.ramo_id}
@@ -899,7 +1917,19 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                   </select>
                 </div>
                 <div className="polizas-form-group">
-                  <label>Subramo *</label>
+                  <div className="polizas-field-label-row">
+                    <label>Subramo *</label>
+                    <div className="polizas-field-actions">
+                      <button
+                        type="button"
+                        className="polizas-field-action-btn"
+                        onClick={() => handleOpenQuickCatalog('subramo', 'search')}
+                        title="Buscar subramo en catálogo"
+                      >
+                        <Search size={11} /> Buscar
+                      </button>
+                    </div>
+                  </div>
                   <select
                     required
                     value={formData.subramo_id}
@@ -916,7 +1946,29 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
               </div>
 
               <div className="polizas-form-group">
-                <label>Agente (opcional, id agente_workspace)</label>
+                <div className="polizas-field-label-row">
+                  <label>Agente (opcional, id agente_workspace)</label>
+                  <div className="polizas-field-actions">
+                    <button
+                      type="button"
+                      className="polizas-field-action-btn"
+                      onClick={() => handleOpenQuickCatalog('agente', 'search')}
+                      title="Buscar agente existente"
+                    >
+                      <Search size={11} /> Buscar
+                    </button>
+                    {can('agentes.manage') && (
+                      <button
+                        type="button"
+                        className="polizas-field-action-btn is-create"
+                        onClick={() => handleOpenQuickCatalog('agente', 'create', aiDetectedData?.agente)}
+                        title="Registrar nuevo agente"
+                      >
+                        <Plus size={11} /> Agregar
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <select
                   value={formData.agente_id}
                   onChange={(e) => setFormData({ ...formData, agente_id: e.target.value })}
@@ -933,6 +1985,11 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                 </small>
               </div>
 
+              {type === 'add' && <div className="polizas-form-group">
+                <label>Renovación de póliza anterior (opcional)</label>
+                <input type="number" min="1" step="1" disabled={!renovacionDisponible} value={formData.poliza_anterior_id || ''} onChange={e => setFormData({ ...formData, poliza_anterior_id: e.target.value })} placeholder="ID de la póliza anterior" />
+                <small>{renovacionDisponible ? 'Indica el ID de una póliza del workspace activo. El vínculo se registra solo al crear.' : 'Vínculo disponible al aplicar la migración de renovaciones.'}</small>
+              </div>}
               <div className="polizas-form-group">
                 <label>Número de póliza *</label>
                 <input
@@ -1060,11 +2117,45 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
                 </div>
               </div>
 
+              {isEdit && !detallesListos && <p className="gsea-auth-error">{cargaDetalles.error || 'Cargando datos específicos de la póliza…'}</p>}
+              {isEdit && detallesListos && !tipoAlta && <p className="gsea-auth-error">No se pudo identificar una sección específica con el ramo y subramo del catálogo actual.</p>}
+              {isDrawer && detallesListos && tipoAlta && (
+                <>
+                  {(['auto', 'moto'].includes(tipoAlta) ? ['vehiculo'] : tipoAlta === 'medicos' ? ['gastos_medicos'] : tipoAlta === 'viaje' ? ['viaje'] : []).map((group) => (
+                    <React.Fragment key={group}>
+                      <div className="polizas-form-group"><label>{group === 'vehiculo' ? 'Datos del vehículo' : group === 'gastos_medicos' ? 'Gastos médicos' : 'Datos del viaje'}</label></div>
+                      <div className="polizas-form-row">
+                        <DetalleInputs group={group} tipo={tipoAlta} value={detalles[group]} onChange={(key, value) => setDetalles((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }))} />
+                      </div>
+                    </React.Fragment>
+                  ))}
+                  {(['auto', 'moto', 'danos'].includes(tipoAlta) ? ['coberturas'] : ['asegurados', 'beneficiarios', 'coberturas']).map((group) => (
+                    <React.Fragment key={group}>
+                      <div className="polizas-form-group"><label>{group === 'asegurados' ? 'Asegurados' : group === 'beneficiarios' ? 'Beneficiarios' : 'Coberturas'}</label></div>
+                      {group === 'asegurados' && aseguradosProtegidos && <p className="gsea-auth-error">No se pueden modificar asegurados con beneficiarios vinculados: se perderían sus asociaciones.</p>}
+                      {detalles[group].map((item, index) => (
+                        <React.Fragment key={index}>
+                          <div className="polizas-form-row">
+                            <DetalleInputs group={group} tipo={tipoAlta} value={item} disabled={group === 'asegurados' && aseguradosProtegidos} onChange={(key, value) => setDetalles((prev) => ({ ...prev, [group]: prev[group].map((row, i) => i === index ? { ...row, [key]: value } : row) }))} />
+                          </div>
+                          <button type="button" className="polizas-btn-cancel" disabled={group === 'asegurados' && aseguradosProtegidos} onClick={() => setDetalles((prev) => ({ ...prev, [group]: prev[group].filter((_, i) => i !== index) }))}>
+                            Quitar {group === 'asegurados' ? 'asegurado' : group === 'beneficiarios' ? 'beneficiario' : 'cobertura'} {index + 1}
+                          </button>
+                        </React.Fragment>
+                      ))}
+                      <button type="button" className="polizas-btn-cancel" disabled={group === 'asegurados' && aseguradosProtegidos} onClick={() => setDetalles((prev) => ({ ...prev, [group]: [...prev[group], {}] }))}>
+                        Agregar {group === 'asegurados' ? 'asegurado' : group === 'beneficiarios' ? 'beneficiario' : 'cobertura'}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
+
               <div className="polizas-form-actions">
                 <button type="button" onClick={onClose} className="polizas-btn-cancel">
                   Cancelar
                 </button>
-                <button type="submit" className="polizas-btn-submit" disabled={saving}>
+                <button type="submit" className="polizas-btn-submit" disabled={saving || !detallesListos}>
                   {saving ? 'Guardando…' : type === 'add' ? 'Guardar Póliza' : 'Actualizar'}
                 </button>
               </div>
@@ -1072,6 +2163,19 @@ const ModalManager = ({ type, data, catalogos, onClose, onSaved, onDeleteConfirm
           )}
         </div>
       </motion.div>
+      <PolizaQuickCatalogModal
+        isOpen={quickCatalog.isOpen}
+        mode={quickCatalog.mode}
+        catalogType={quickCatalog.catalogType}
+        initialData={quickCatalog.initialData}
+        catalogos={catalogos}
+        selectedAseguradoraId={formData.aseguradora_id}
+        selectedRamoId={formData.ramo_id}
+        canManageContratantes={can('contratantes.manage')}
+        canManageAgentes={can('agentes.manage')}
+        onSelect={handleCatalogItemSelect}
+        onClose={() => setQuickCatalog((prev) => ({ ...prev, isOpen: false }))}
+      />
     </motion.div>
   );
 };

@@ -5,6 +5,9 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.65rem 1.25rem;
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
   background: linear-gradient(90deg, #1e488f 0%, #1b6f81 100%);
   color: #fff;
   font-size: 0.875rem;
@@ -47,11 +50,11 @@
 }
 
 .gsea-app-main--expanded {
-  margin-left: 280px;
+  margin-left: 248px;
 }
 
 .gsea-app-main--collapsed {
-  margin-left: 88px;
+  margin-left: 72px;
 }
 
 /* --- Billing locked page --- */

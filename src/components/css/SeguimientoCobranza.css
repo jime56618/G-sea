@@ -33,11 +33,11 @@ body {
 }
 
 .cobranza-main-content.cobranza-sidebar-expanded {
-  margin-left: 260px;
+  margin-left: 0;
 }
 
 .cobranza-main-content.cobranza-sidebar-collapsed {
-  margin-left: 80px;
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {
@@ -996,11 +996,11 @@ body {
 }
 
 .cobranza-main-content.cobranza-sidebar-expanded {
-  margin-left: 248px;
+  margin-left: 0;
 }
 
 .cobranza-main-content.cobranza-sidebar-collapsed {
-  margin-left: 72px;
+  margin-left: 0;
 }
 
 /* Drawer exclusivamente para el formulario de edición */
@@ -1221,7 +1221,7 @@ body {
   .cobranza-main-content.cobranza-sidebar-expanded,
   .cobranza-main-content.cobranza-sidebar-collapsed {
     width: auto;
-    margin-left: 72px;
+    margin-left: 0;
   }
 
   .cobranza-main {
@@ -1309,7 +1309,7 @@ body {
 @media (max-width: 520px) {
   .cobranza-main-content.cobranza-sidebar-expanded,
   .cobranza-main-content.cobranza-sidebar-collapsed {
-    margin-left: 64px;
+    margin-left: 0;
   }
 
   .cobranza-pagination-controls {

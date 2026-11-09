@@ -80,11 +80,11 @@ export default function UserNavbar() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
-  const [userData, setUserData] = useState({
-    name: '',
-    avatar: '',
+  const [userData, setUserData] = useState(() => ({
+    name: user?.name || '',
+    avatar: user?.avatar || '',
     avatarFile: null
-  });
+  }));
 
   useEffect(() => {
     if (user) {
@@ -156,7 +156,7 @@ export default function UserNavbar() {
   // 🔥 AVATAR DINÁMICO
   const avatarSrc = userData.avatarFile
     ? URL.createObjectURL(userData.avatarFile)
-    : userData.avatar || `https://ui-avatars.com/api/?name=${userData.name}`;
+    : userData.avatar || (userData.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}` : '');
 
   const roleLabel = role?.name || role?.slug || '';
   const trialHint =

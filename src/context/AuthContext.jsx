@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
     return next;
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options = {}) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       setSession(null);
@@ -36,10 +36,18 @@ export function AuthProvider({ children }) {
       return null;
     }
 
+    const cached = getAuthSession();
+    // Reutilizar sesión del contexto de autenticación si ya es válida
+    if (cached?.user && cached?.current_workspace && !options?.force) {
+      setSession(cached);
+      setLoading(false);
+      return cached;
+    }
+
     if (refreshingRef.current) return getAuthSession();
     refreshingRef.current = true;
 
-    const hadCache = Boolean(getAuthSession());
+    const hadCache = Boolean(cached);
     if (!hadCache) setLoading(true);
 
     try {

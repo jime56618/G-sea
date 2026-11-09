@@ -32,11 +32,11 @@ body {
 }
 
 .clientes-main-content.clientes-sidebar-expanded {
-  margin-left: 260px;
+  margin-left: 0;
 }
 
 .clientes-main-content.clientes-sidebar-collapsed {
-  margin-left: 80px;
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {
@@ -1486,11 +1486,11 @@ body {
 }
 
 .clientes-main-content.clientes-sidebar-expanded {
-  margin-left: 248px;
+  margin-left: 0;
 }
 
 .clientes-main-content.clientes-sidebar-collapsed {
-  margin-left: 72px;
+  margin-left: 0;
 }
 
 /* Al eliminar el avatar, el contenido queda alineado */
@@ -1715,7 +1715,7 @@ body {
   .clientes-main-content.clientes-sidebar-expanded,
   .clientes-main-content.clientes-sidebar-collapsed {
     width: auto;
-    margin-left: 72px;
+    margin-left: 0;
   }
 
   .clientes-main {
@@ -1806,7 +1806,7 @@ body {
 @media (max-width: 520px) {
   .clientes-main-content.clientes-sidebar-expanded,
   .clientes-main-content.clientes-sidebar-collapsed {
-    margin-left: 64px;
+    margin-left: 0;
   }
 
   .clientes-pagination-controls {
