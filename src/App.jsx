@@ -26,6 +26,7 @@ import MyDataSettings from './components/MyDataSettings';
 import SecuritySettings from './components/SecuritySettings';
 import { TerminosPage, AvisoPrivacidadPage } from './components/LegalPages';
 import Reportes from './components/Reportes';
+import PagarAseguradora from './components/PagarAseguradora';
 
 import './components/css/SaaS.css';
 
@@ -43,6 +44,8 @@ export default function App() {
         <Route path="/billing-locked" element={<BillingLocked />} />
         {/* Público: demo Metabase (sin login) */}
         <Route path="/reportes" element={<Reportes />} />
+        {/* Público: botón WhatsApp "Pagar mi póliza" → portal aseguradora */}
+        <Route path="/pagar/:slug" element={<PagarAseguradora />} />
 
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/agentes" element={<ProtectedRoute><Agentes /></ProtectedRoute>} />
