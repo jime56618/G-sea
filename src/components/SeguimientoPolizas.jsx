@@ -141,8 +141,12 @@ function divisorFrecuencia(frecuencia) {
   }
 }
 
-/** Recalcula IVA, prima total y monto cuota a partir de prima neta + frecuencia. */
-function applyPremiumCalc(prev, patch = {}) {
+/**
+ * Recalcula IVA, prima total y monto cuota.
+ * Si `options.fromPdf` trae iva/prima_total/monto_cuota (aunque sea 0), se respetan
+ * y no se fuerza el 16%.
+ */
+function applyPremiumCalc(prev, patch = {}, options = {}) {
   const next = { ...prev, ...patch };
   const netaRaw = next.prima_neta;
   const neta = netaRaw === '' || netaRaw == null ? NaN : Number(netaRaw);
@@ -156,10 +160,17 @@ function applyPremiumCalc(prev, patch = {}) {
     };
   }
 
-  const iva = neta * IVA_RATE;
-  const total = neta + iva;
+  const fromPdf = options.fromPdf || {};
+  const hasPdfIva = fromPdf.iva !== undefined && fromPdf.iva !== null && fromPdf.iva !== '';
+  const hasPdfTotal =
+    fromPdf.prima_total !== undefined && fromPdf.prima_total !== null && fromPdf.prima_total !== '';
+  const hasPdfCuota =
+    fromPdf.monto_cuota !== undefined && fromPdf.monto_cuota !== null && fromPdf.monto_cuota !== '';
+
+  const iva = hasPdfIva ? Number(fromPdf.iva) : neta * IVA_RATE;
+  const total = hasPdfTotal ? Number(fromPdf.prima_total) : neta + iva;
   const divisor = divisorFrecuencia(next.frecuencia_cobro);
-  const cuota = total / divisor;
+  const cuota = hasPdfCuota ? Number(fromPdf.monto_cuota) : total / divisor;
 
   return {
     ...next,
@@ -257,22 +268,33 @@ function mapAiFormData(aiForm, catalogos) {
   const rawNeta = aiForm.prima_neta != null ? String(aiForm.prima_neta) : '';
   const rawFreq = aiForm.frecuencia_cobro || 'unico';
 
-  const base = applyPremiumCalc({
-    contratante_id: '',
-    aseguradora_id: '',
-    ramo_id: '',
-    subramo_id: '',
-    agente_id: '',
-    numero_poliza: aiForm.numero_poliza || '',
-    poliza_anterior_id: '',
-    fecha_emision: aiForm.fecha_emision ? aiForm.fecha_emision.slice(0, 10) : '',
-    inicio_vigencia: aiForm.inicio_vigencia ? aiForm.inicio_vigencia.slice(0, 10) : '',
-    fin_vigencia: aiForm.fin_vigencia ? aiForm.fin_vigencia.slice(0, 10) : '',
-    prima_neta: rawNeta,
-    moneda: aiForm.moneda || 'MXN',
-    frecuencia_cobro: rawFreq,
-    telefono_notificacion: aiForm.telefono_notificacion || '',
-  }, { prima_neta: rawNeta, frecuencia_cobro: rawFreq });
+  // Respeta IVA / total / cuota del PDF (incluye IVA = 0). Solo calcula 16% si el PDF no trae IVA.
+  const base = applyPremiumCalc(
+    {
+      contratante_id: '',
+      aseguradora_id: '',
+      ramo_id: '',
+      subramo_id: '',
+      agente_id: '',
+      numero_poliza: aiForm.numero_poliza || '',
+      poliza_anterior_id: '',
+      fecha_emision: aiForm.fecha_emision ? aiForm.fecha_emision.slice(0, 10) : '',
+      inicio_vigencia: aiForm.inicio_vigencia ? aiForm.inicio_vigencia.slice(0, 10) : '',
+      fin_vigencia: aiForm.fin_vigencia ? aiForm.fin_vigencia.slice(0, 10) : '',
+      prima_neta: rawNeta,
+      moneda: aiForm.moneda || 'MXN',
+      frecuencia_cobro: rawFreq,
+      telefono_notificacion: aiForm.telefono_notificacion || '',
+    },
+    { prima_neta: rawNeta, frecuencia_cobro: rawFreq },
+    {
+      fromPdf: {
+        iva: aiForm.iva,
+        prima_total: aiForm.prima_total,
+        monto_cuota: aiForm.monto_cuota,
+      },
+    }
+  );
 
   if (aiForm.contratante_id && catalogos.contratantes?.some((c) => String(c.id) === String(aiForm.contratante_id))) {
     base.contratante_id = String(aiForm.contratante_id);
@@ -282,11 +304,12 @@ function mapAiFormData(aiForm, catalogos) {
     base.aseguradora_id = String(aiForm.aseguradora_id);
   }
 
-  if (aiForm.ramo_id && catalogos.ramos?.some((r) => String(r.id) === String(aiForm.ramo_id))) {
+  // Confiar en IDs del backend (pueden ser ramo/subramo recién creados por el extractor)
+  if (aiForm.ramo_id) {
     base.ramo_id = String(aiForm.ramo_id);
   }
 
-  if (aiForm.subramo_id && catalogos.subramos?.some((s) => String(s.id) === String(aiForm.subramo_id) && String(s.ramo_id) === String(base.ramo_id))) {
+  if (aiForm.subramo_id) {
     base.subramo_id = String(aiForm.subramo_id);
   }
 
@@ -394,26 +417,7 @@ function collectAiWarnings(aiResult, computedForm) {
     }
   }
 
-  if (aiForm.iva != null && computedForm.iva) {
-    const diff = Math.abs(Number(aiForm.iva) - Number(computedForm.iva));
-    if (diff > 0.5) {
-      warnings.push(`El IVA calculado por el sistema (${computedForm.iva}) difiere del detectado en el PDF (${Number(aiForm.iva).toFixed(2)}). Revisa el importe.`);
-    }
-  }
-
-  if (aiForm.prima_total != null && computedForm.prima_total) {
-    const diff = Math.abs(Number(aiForm.prima_total) - Number(computedForm.prima_total));
-    if (diff > 0.5) {
-      warnings.push(`La prima total calculada (${computedForm.prima_total}) difiere de la detectada en el PDF (${Number(aiForm.prima_total).toFixed(2)}). Revisa los importes.`);
-    }
-  }
-
-  if (aiForm.monto_cuota != null && computedForm.monto_cuota) {
-    const diff = Math.abs(Number(aiForm.monto_cuota) - Number(computedForm.monto_cuota));
-    if (diff > 0.5) {
-      warnings.push(`El monto por cuota calculado (${computedForm.monto_cuota}) difiere del detectado en el PDF (${Number(aiForm.monto_cuota).toFixed(2)}).`);
-    }
-  }
+  // Ya no avisamos IVA/total "calculado vs PDF": el form respeta los del PDF.
 
   return warnings;
 }
@@ -930,6 +934,7 @@ const SeguimientoPolizas = () => {
       {modalType && (
         <ModalManager
           renovacionDisponible={renovacionDisponible}
+          polizas={polizas}
           type={modalType}
           data={selectedPoliza}
           catalogos={catalogos}
@@ -1186,6 +1191,7 @@ const ModalManager = ({
   catalogos,
   onUpdateCatalogos,
   renovacionDisponible,
+  polizas = [],
   initialAiData,
   onClearAiData,
   onAiExtractedFromUpload,
@@ -1241,6 +1247,51 @@ const ModalManager = ({
     });
   }, [aiDetectedData]);
 
+  /**
+   * Un clic: crea el contratante con lo detectado en el PDF y lo selecciona.
+   * Si falla (duplicado / validación), abre el modal precargado.
+   */
+  const handleRegisterContratanteFromAi = useCallback(async () => {
+    const c = aiDetectedData?.contratante;
+    if (!c?.nombre?.trim()) {
+      handleOpenQuickCatalog('contratante', 'create', c || {});
+      return;
+    }
+
+    const nombre = String(c.nombre).trim();
+    // Si ya existe en el catálogo local, solo selecciónalo
+    const existing = (catalogos.contratantes || []).find(
+      (x) => String(x.nombre || '').trim().toLowerCase() === nombre.toLowerCase()
+    );
+    if (existing) {
+      if (onUpdateCatalogos) onUpdateCatalogos('contratante', existing);
+      setFormData((prev) => ({ ...prev, contratante_id: String(existing.id) }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('contratante')));
+      return;
+    }
+
+    setDrawerAiError('');
+    try {
+      const res = await apiFetch('/contratantes', {
+        method: 'POST',
+        body: JSON.stringify({
+          nombre,
+          rfc: c.rfc || null,
+          telefono: c.telefono || null,
+          email: c.email || null,
+          direccion: c.direccion || null,
+        }),
+      });
+      const item = res?.data || res;
+      if (onUpdateCatalogos) onUpdateCatalogos('contratante', item);
+      setFormData((prev) => ({ ...prev, contratante_id: String(item.id) }));
+      setAiWarnings((prev) => prev.filter((w) => !w.toLowerCase().includes('contratante')));
+    } catch (ex) {
+      setDrawerAiError(ex.message || 'No se pudo registrar el contratante. Complétalo en el formulario.');
+      handleOpenQuickCatalog('contratante', 'create', c);
+    }
+  }, [aiDetectedData, catalogos.contratantes, handleOpenQuickCatalog, onUpdateCatalogos]);
+
   const handleCatalogItemSelect = useCallback((catType, item) => {
     if (!item) return;
 
@@ -1274,6 +1325,18 @@ const ModalManager = ({
 
   const applyExtractedAiResult = useCallback((aiResult) => {
     skipDetallesResetRef.current = true;
+    const matches = aiResult.matches || {};
+    // Si el backend creó ramo/subramo nuevo, mételos al catálogo local para el select
+    if (matches.ramo?.id && onUpdateCatalogos) {
+      onUpdateCatalogos('ramos', { id: matches.ramo.id, nombre: matches.ramo.nombre });
+    }
+    if (matches.subramo?.id && matches.ramo?.id && onUpdateCatalogos) {
+      onUpdateCatalogos('subramos', {
+        id: matches.subramo.id,
+        nombre: matches.subramo.nombre,
+        ramo_id: matches.ramo.id,
+      });
+    }
     const newForm = mapAiFormData(aiResult.form_data || {}, catalogos);
     const newDetalles = mapAiDetalles(aiResult.detalles || {});
     setFormData((prev) => ({
@@ -1286,7 +1349,7 @@ const ModalManager = ({
     setAiWarnings(w);
     setAiDetectedData(aiResult.detected || null);
     setDrawerAiError('');
-  }, [catalogos]);
+  }, [catalogos, onUpdateCatalogos]);
 
   useEffect(() => {
     if (type !== 'edit') return;
@@ -1354,24 +1417,34 @@ const ModalManager = ({
       initializedEditIdRef.current = data.id;
       const p = data.raw;
       setFormData(
-        applyPremiumCalc({
-          contratante_id: String(p.contratante_id ?? ''),
-          aseguradora_id: String(p.aseguradora_id ?? ''),
-          ramo_id: String(p.ramo_id ?? ''),
-          subramo_id: String(p.subramo_id ?? ''),
-          agente_id: p.agente_id ? String(p.agente_id) : '',
-          numero_poliza: p.numero_poliza || '',
-          fecha_emision: p.fecha_emision?.slice(0, 10) || '',
-          inicio_vigencia: p.inicio_vigencia?.slice(0, 10) || '',
-          fin_vigencia: p.fin_vigencia?.slice(0, 10) || '',
-          prima_neta: p.prima_neta != null ? String(p.prima_neta) : '',
-          iva: p.iva != null ? String(p.iva) : '',
-          prima_total: p.prima_total != null ? String(p.prima_total) : '',
-          moneda: p.moneda || 'MXN',
-          frecuencia_cobro: p.frecuencia_cobro || 'unico',
-          monto_cuota: p.monto_cuota != null ? String(p.monto_cuota) : '',
-          telefono_notificacion: p.telefono_notificacion || '',
-        })
+        applyPremiumCalc(
+          {
+            contratante_id: String(p.contratante_id ?? ''),
+            aseguradora_id: String(p.aseguradora_id ?? ''),
+            ramo_id: String(p.ramo_id ?? ''),
+            subramo_id: String(p.subramo_id ?? ''),
+            agente_id: p.agente_id ? String(p.agente_id) : '',
+            numero_poliza: p.numero_poliza || '',
+            fecha_emision: p.fecha_emision?.slice(0, 10) || '',
+            inicio_vigencia: p.inicio_vigencia?.slice(0, 10) || '',
+            fin_vigencia: p.fin_vigencia?.slice(0, 10) || '',
+            prima_neta: p.prima_neta != null ? String(p.prima_neta) : '',
+            iva: p.iva != null ? String(p.iva) : '',
+            prima_total: p.prima_total != null ? String(p.prima_total) : '',
+            moneda: p.moneda || 'MXN',
+            frecuencia_cobro: p.frecuencia_cobro || 'unico',
+            monto_cuota: p.monto_cuota != null ? String(p.monto_cuota) : '',
+            telefono_notificacion: p.telefono_notificacion || '',
+          },
+          {},
+          {
+            fromPdf: {
+              iva: p.iva,
+              prima_total: p.prima_total,
+              monto_cuota: p.monto_cuota,
+            },
+          }
+        )
       );
       setAiWarnings([]);
       setAiDetectedData(null);
@@ -1743,9 +1816,10 @@ const ModalManager = ({
                                         <button
                                           type="button"
                                           className="polizas-ai-warning-btn is-primary"
-                                          onClick={() => handleOpenQuickCatalog('contratante', 'create', aiDetectedData?.contratante)}
+                                          onClick={handleRegisterContratanteFromAi}
+                                          title="Crea el contratante con los datos del PDF y lo selecciona"
                                         >
-                                          <Plus size={11} /> Registrar nuevo
+                                          <Plus size={11} /> Registrar con datos del PDF
                                         </button>
                                       )}
                                     </>
@@ -1826,8 +1900,12 @@ const ModalManager = ({
                       <button
                         type="button"
                         className="polizas-field-action-btn is-create"
-                        onClick={() => handleOpenQuickCatalog('contratante', 'create', aiDetectedData?.contratante)}
-                        title="Registrar nuevo contratante"
+                        onClick={() =>
+                          aiDetectedData?.contratante?.nombre
+                            ? handleRegisterContratanteFromAi()
+                            : handleOpenQuickCatalog('contratante', 'create', aiDetectedData?.contratante)
+                        }
+                        title="Registrar contratante (usa datos del PDF si hay extracción)"
                       >
                         <Plus size={11} /> Agregar
                       </button>
@@ -1986,9 +2064,29 @@ const ModalManager = ({
               </div>
 
               {type === 'add' && <div className="polizas-form-group">
-                <label>Renovación de póliza anterior (opcional)</label>
-                <input type="number" min="1" step="1" disabled={!renovacionDisponible} value={formData.poliza_anterior_id || ''} onChange={e => setFormData({ ...formData, poliza_anterior_id: e.target.value })} placeholder="ID de la póliza anterior" />
-                <small>{renovacionDisponible ? 'Indica el ID de una póliza del workspace activo. El vínculo se registra solo al crear.' : 'Vínculo disponible al aplicar la migración de renovaciones.'}</small>
+                <label>¿Es renovación? Póliza anterior</label>
+                <select
+                  disabled={!renovacionDisponible}
+                  value={formData.poliza_anterior_id || ''}
+                  onChange={e => setFormData({ ...formData, poliza_anterior_id: e.target.value })}
+                >
+                  <option value="">No es renovación</option>
+                  {polizas
+                    .filter((p) => p?.id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        #{p.id} · {p.numero || p.numero_poliza || 'Sin número'}
+                        {p.finVigencia || p.fin_vigencia
+                          ? ` · fin ${String(p.finVigencia || p.fin_vigencia).slice(0, 10)}`
+                          : ''}
+                      </option>
+                    ))}
+                </select>
+                <small>
+                  {renovacionDisponible
+                    ? 'Si renuevas una póliza vencida, elígela aquí. Eso alimenta la Tasa de renovación del Dashboard.'
+                    : 'Vínculo disponible al aplicar la migración de renovaciones.'}
+                </small>
               </div>}
               <div className="polizas-form-group">
                 <label>Número de póliza *</label>
@@ -2002,12 +2100,13 @@ const ModalManager = ({
 
               <div className="polizas-form-row">
                 <div className="polizas-form-group">
-                  <label>Emisión</label>
+                  <label>Fecha de emisión</label>
                   <input
                     type="date"
                     value={formData.fecha_emision}
                     onChange={(e) => setFormData({ ...formData, fecha_emision: e.target.value })}
                   />
+                  <small>Define el mes de Pólizas vendidas, Prima emitida y Meta comercial.</small>
                 </div>
                 <div className="polizas-form-group">
                   <label>Moneda</label>
@@ -2016,6 +2115,7 @@ const ModalManager = ({
                     onChange={(e) => setFormData({ ...formData, moneda: e.target.value })}
                     placeholder="MXN"
                   />
+                  <small>Debe coincidir con la moneda de la meta (ej. MXN).</small>
                 </div>
               </div>
 
@@ -2054,7 +2154,7 @@ const ModalManager = ({
                   />
                 </div>
                 <div className="polizas-form-group">
-                  <label>IVA (16%)</label>
+                  <label>IVA</label>
                   <input
                     type="number"
                     step="0.01"

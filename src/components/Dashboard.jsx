@@ -41,6 +41,7 @@ const EMPTY_DASHBOARD = {
     polizas_vendidas: null,
     prima_mensual: null,
     tasa_renovacion: null,
+    renovaciones_registradas: null,
     polizas_vencidas: null,
   },
   objetivo: { current: null, target: null, progress_pct: null },
@@ -333,9 +334,20 @@ export default function Dashboard() {
 
           <section className="gsea-kpi-grid" aria-label="Indicadores principales">
             <Kpi title="Clientes totales" value={kpis.clientes_total} icon={Users} tone="is-slate" footer="Cartera registrada" />
-            <Kpi title="Pólizas vendidas" value={kpis.polizas_vendidas} icon={ShieldCheck} tone="is-blue" footer="Emisiones registradas" />
-            <Kpi title="Prima emitida del periodo" value={kpis.prima_mensual} icon={BadgeDollarSign} tone="is-emerald" currency footer="Importe reportado" />
-            <Kpi title="Tasa de renovación" value={kpis.tasa_renovacion} icon={TrendingUp} tone="is-amber" percent footer="Renovaciones registradas" />
+            <Kpi title="Pólizas vendidas" value={kpis.polizas_vendidas} icon={ShieldCheck} tone="is-blue" footer="Con fecha de emisión del periodo" />
+            <Kpi title="Prima emitida del periodo" value={kpis.prima_mensual} icon={BadgeDollarSign} tone="is-emerald" currency footer="Suma de prima total (MXN)" />
+            <Kpi
+              title="Tasa de renovación"
+              value={kpis.tasa_renovacion}
+              icon={TrendingUp}
+              tone="is-amber"
+              percent
+              footer={
+                kpis.renovaciones_registradas != null
+                  ? `${number(kpis.renovaciones_registradas)} renovaciones vinculadas`
+                  : 'Vincular póliza anterior al crear'
+              }
+            />
             <Kpi title="Pólizas vencidas" value={kpis.polizas_vencidas} icon={AlertCircle} tone="is-danger" danger footer="Requieren atención" />
           </section>
 

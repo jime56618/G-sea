@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -109,9 +110,9 @@ export default function BillingSettings() {
   // Activación / renovación rápida para workspaces bloqueados o en prueba
   const [activating, setActivating] = useState(false);
 
-  // Administración de suscripción actual (cancelar renovación, cambiar a manual, reactivar)
+  // Administración de suscripción actual
   const [isManageOpen, setIsManageOpen] = useState(false);
-  const [cancelModalAction, setCancelModalAction] = useState(null); // 'cancel' | 'switch-to-manual' | null
+  const [cancelModalAction, setCancelModalAction] = useState(null);
   const [submittingManageAction, setSubmittingManageAction] = useState(false);
 
   const workspaceId = getActiveWorkspaceId();
@@ -119,6 +120,7 @@ export default function BillingSettings() {
   // Carga inicial de datos de facturación
   const fetchBilling = async () => {
     if (!workspaceId) return;
+
     try {
       const data = await apiFetch(`/workspaces/${workspaceId}/billing`);
       setDetail(data);
@@ -133,7 +135,7 @@ export default function BillingSettings() {
     fetchBilling();
   }, [workspaceId]);
 
-  // Manejo del retorno desde Stripe Checkout (?checkout=success&session_id=... o ?checkout=cancel)
+  // Manejo del retorno desde Stripe Checkout
   useEffect(() => {
     const checkoutResult = searchParams.get('checkout');
     const sessionId = searchParams.get('session_id');
@@ -152,6 +154,7 @@ export default function BillingSettings() {
       if (checkoutResult === 'success' && sessionId) {
         try {
           setErrorMsg('');
+
           const verifyRes = await apiFetch(
             `/workspaces/${workspaceId}/billing/checkout/verify`,
             {
@@ -170,6 +173,7 @@ export default function BillingSettings() {
                 'Tu pago está siendo procesado por Stripe. El estado de tu suscripción se actualizará en unos momentos.'
               );
             }
+
             await refresh({ force: true });
             await fetchBilling();
           }
@@ -198,10 +202,55 @@ export default function BillingSettings() {
   const currentPlan = sub?.plan;
   const usage = sub?.usage || { users: 0, polizas: 0, agentes: 0 };
   const plans = detail?.plans || [];
+
+  /**
+   * Convierte un ID de plan legacy al ID de su equivalente público.
+   * El plan legacy "pro" corresponde al plan público "escala".
+   */
+  const getPublicPlanId = (candidateId) => {
+    if (candidateId == null) return null;
+
+    const candidate = [currentPlan, ...plans].find(
+      (plan) => Number(plan?.id) === Number(candidateId)
+    );
+
+    if (candidate?.slug === 'pro') {
+      return plans.find((plan) => plan.slug === 'escala')?.id ?? null;
+    }
+
+    return (
+      plans.find((plan) => Number(plan.id) === Number(candidateId))?.id ?? null
+    );
+  };
+
+  /**
+   * Comprueba si un plan seleccionado es equivalente al plan actual.
+   */
+  const isCurrentPlanSelection = (candidateId) => {
+    if (candidateId == null || !currentPlan) return false;
+
+    const publicId = getPublicPlanId(candidateId);
+
+    if (!publicId) return false;
+
+    if (Number(publicId) === Number(currentPlan.id)) return true;
+
+    return (
+      currentPlan.slug === 'pro' &&
+      plans.some(
+        (plan) =>
+          plan.slug === 'escala' &&
+          Number(plan.id) === Number(publicId)
+      )
+    );
+  };
+
   const hasActiveStripeSubscription = Boolean(sub?.has_stripe_subscription);
+
   const isScheduledCancellation = Boolean(
     sub?.cancel_at_period_end || (sub?.status === 'canceled' && sub?.is_accessible)
   );
+
   const isAutomaticActive = Boolean(
     sub?.status === 'active' &&
       (sub?.renewal_mode === 'automatic' || hasActiveStripeSubscription) &&
@@ -215,11 +264,17 @@ export default function BillingSettings() {
 
   // Abrir modal y calcular cotización oficial desde backend
   const handleOpenConfirmModal = async (planId, modeOverride) => {
-    const targetId = planId || selectedPlanId || currentPlan?.id;
-    if (!targetId) return;
+    const targetId = getPublicPlanId(
+      planId || selectedPlanId || currentPlan?.id
+    );
+
+    if (!targetId) {
+      setErrorMsg('No se encontró un plan público válido para continuar.');
+      return;
+    }
 
     const isRenewingCurrentActivePlan =
-      targetId === currentPlan?.id &&
+      isCurrentPlanSelection(targetId) &&
       (sub?.status === 'active' || isScheduledCancellation);
 
     const defaultModeForTarget = isRenewingCurrentActivePlan
@@ -228,11 +283,10 @@ export default function BillingSettings() {
 
     const modeToUse = modeOverride || defaultModeForTarget;
 
-    // Si existe una suscripción automática con cancelación programada para este mismo plan,
-    // reutilizar el endpoint de reactivación sin crear otra suscripción en Stripe.
+    // Reactivar la suscripción existente sin crear otra suscripción en Stripe.
     if (
       modeToUse === 'automatic' &&
-      targetId === currentPlan?.id &&
+      isCurrentPlanSelection(targetId) &&
       Boolean(sub?.can_reactivate_automatic)
     ) {
       setIsModalOpen(false);
@@ -241,7 +295,7 @@ export default function BillingSettings() {
       return;
     }
 
-    setSelectedPlanId(targetId);
+    setSelectedPlanId(Number(targetId));
     setRenewalMode(modeToUse);
     setIsModalOpen(true);
     setLoadingPreview(true);
@@ -252,12 +306,18 @@ export default function BillingSettings() {
         `/workspaces/${workspaceId}/billing/preview-change`,
         {
           method: 'POST',
-          body: JSON.stringify({ plan_id: targetId, renewal_mode: modeToUse }),
+          body: JSON.stringify({
+            plan_id: Number(targetId),
+            renewal_mode: modeToUse,
+          }),
         }
       );
+
       setPreviewData(quoteRes);
     } catch (e) {
-      setErrorMsg(e.message || 'No fue posible obtener la cotización del cambio de plan.');
+      setErrorMsg(
+        e.message || 'No fue posible obtener la cotización del cambio de plan.'
+      );
     } finally {
       setLoadingPreview(false);
     }
@@ -266,11 +326,10 @@ export default function BillingSettings() {
   const handleRenewalModeChange = async (newMode) => {
     if (newMode === renewalMode || submittingChange) return;
 
-    // Si el usuario ya tiene una suscripción automática activa en este mismo plan y elige
-    // cambiar a modalidad manual, abrir el modal gratuito de cambio de modalidad en lugar de cobrar otro mes.
+    // Cambiar de automático a manual sin generar otro cobro.
     if (
       newMode === 'manual' &&
-      selectedPlanId === currentPlan?.id &&
+      isCurrentPlanSelection(selectedPlanId) &&
       isAutomaticActive
     ) {
       setIsModalOpen(false);
@@ -279,10 +338,10 @@ export default function BillingSettings() {
       return;
     }
 
-    // Si existe una suscripción automática con cancelación programada, reactivarla sin crear otra suscripción.
+    // Reactivar la renovación automática existente.
     if (
       newMode === 'automatic' &&
-      selectedPlanId === currentPlan?.id &&
+      isCurrentPlanSelection(selectedPlanId) &&
       Boolean(sub?.can_reactivate_automatic)
     ) {
       setIsModalOpen(false);
@@ -292,6 +351,7 @@ export default function BillingSettings() {
     }
 
     setRenewalMode(newMode);
+
     if (selectedPlanId) {
       await handleOpenConfirmModal(selectedPlanId, newMode);
     }
@@ -303,18 +363,25 @@ export default function BillingSettings() {
     setPreviewData(null);
   };
 
-  // Iniciar sesión de Stripe Checkout y redirigir de forma segura
+  // Iniciar sesión de Stripe Checkout
   const handleConfirmPlanChange = async () => {
     if (!selectedPlanId || submittingChange) return;
+
     setSubmittingChange(true);
     setErrorMsg('');
     setSuccessMsg('');
 
     try {
+      const publicPlanId = getPublicPlanId(selectedPlanId);
+
+      if (!publicPlanId) {
+        throw new Error('No se encontró un plan público válido para realizar el pago.');
+      }
+
       const res = await apiFetch(`/workspaces/${workspaceId}/billing/checkout`, {
         method: 'POST',
         body: JSON.stringify({
-          plan_id: selectedPlanId,
+          plan_id: Number(publicPlanId),
           renewal_mode: renewalMode,
         }),
       });
@@ -332,11 +399,15 @@ export default function BillingSettings() {
     }
   };
 
-  // Reactivación / Contratación mediante Stripe Checkout para workspaces bloqueados o en prueba
+  // Reactivación / contratación para workspaces bloqueados o en prueba
   const handleActivate = async () => {
-    const targetPlanId = currentPlan?.id || plans[0]?.id;
+    const targetPlanId =
+      getPublicPlanId(currentPlan?.id) || plans[0]?.id;
+
     if (!targetPlanId) return;
+
     setActivating(true);
+
     try {
       await handleOpenConfirmModal(targetPlanId, renewalMode);
     } finally {
@@ -344,16 +415,20 @@ export default function BillingSettings() {
     }
   };
 
-  // Renovación manual (+1 mes) del plan actual mediante Stripe Checkout
+  // Renovación manual del plan actual
   const handleRenewCurrentPlan = async () => {
-    const targetPlanId = currentPlan?.id || plans[0]?.id;
+    const targetPlanId =
+      getPublicPlanId(currentPlan?.id) || plans[0]?.id;
+
     if (!targetPlanId) return;
+
     await handleOpenConfirmModal(targetPlanId, 'manual');
   };
 
-  // Abrir modal de confirmación antes de cancelar renovación automática o pasar a manual
+  // Abrir modal de cancelación o cambio a modalidad manual
   const handleOpenCancelModal = (actionType) => {
     if (submittingManageAction) return;
+
     setErrorMsg('');
     setSuccessMsg('');
     setCancelModalAction(actionType);
@@ -364,9 +439,10 @@ export default function BillingSettings() {
     setCancelModalAction(null);
   };
 
-  // Confirmar cancelación al final del periodo o cambio a renovación manual
+  // Confirmar cancelación o cambio a modalidad manual
   const handleConfirmCancelAction = async () => {
     if (!cancelModalAction || submittingManageAction) return;
+
     setSubmittingManageAction(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -380,11 +456,14 @@ export default function BillingSettings() {
       const res = await apiFetch(endpoint, {
         method: 'POST',
       });
+
       setCancelModalAction(null);
+
       setSuccessMsg(
         res?.message ||
           'La renovación automática se desactivó para el final de tu periodo actual.'
       );
+
       await refresh({ force: true });
       await fetchBilling();
     } catch (e) {
@@ -396,9 +475,10 @@ export default function BillingSettings() {
     }
   };
 
-  // Reactivar renovación automática sin cobro nuevo cuando el ciclo actual sigue vigente
+  // Reactivar renovación automática
   const handleReactivateAutomatic = async () => {
     if (submittingManageAction) return;
+
     setSubmittingManageAction(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -410,9 +490,11 @@ export default function BillingSettings() {
           method: 'POST',
         }
       );
+
       setSuccessMsg(
         res?.message || 'Renovación automática reactivada exitosamente.'
       );
+
       await refresh({ force: true });
       await fetchBilling();
     } catch (e) {
@@ -438,7 +520,10 @@ export default function BillingSettings() {
     );
   }
 
-  const selectedPlanObj = plans.find((p) => p.id === selectedPlanId);
+  const selectedPlanObj = plans.find(
+    (p) => Number(p.id) === Number(selectedPlanId)
+  );
+
   const isDeferredAutomaticQuote = Boolean(
     renewalMode === 'automatic' &&
       previewData?.quote &&
@@ -483,20 +568,20 @@ export default function BillingSettings() {
           </div>
         ) : (
           <div className="gsea-billing-container">
-            {/* ========================================================
-                1. RESUMEN DE SUSCRIPCIÓN Y USO
-               ======================================================== */}
+            {/* 1. RESUMEN DE SUSCRIPCIÓN Y USO */}
             <div className="gsea-billing-summary-card">
               <div className="gsea-billing-summary-header">
                 <div className="gsea-billing-plan-info">
                   <h2 className="gsea-billing-plan-name">
                     {currentPlan?.nombre || 'Plan GSEA'}
                   </h2>
+
                   <span className="gsea-billing-price-tag">
                     {currentPlan?.precio_mensual != null
                       ? `${formatCurrency(currentPlan.precio_mensual)} / mes`
                       : '—'}
                   </span>
+
                   <div className={`gsea-billing-status-pill ${statusInfo.pillClass}`}>
                     <statusInfo.icon size={14} />
                     <span>{statusInfo.text}</span>
@@ -533,7 +618,7 @@ export default function BillingSettings() {
                 </div>
               </div>
 
-              {/* Fechas de renovación y fin de acceso diferenciadas */}
+              {/* Fechas de renovación y fin de acceso */}
               <div className="gsea-billing-details-grid">
                 <div className="gsea-billing-detail-item">
                   <span className="gsea-billing-detail-label">
@@ -547,6 +632,7 @@ export default function BillingSettings() {
                         : 'Próxima renovación'
                       : 'Fin de acceso'}
                   </span>
+
                   <p className="gsea-billing-detail-val">
                     {sub?.status === 'trialing'
                       ? formatDate(sub?.trial_ends_at)
@@ -554,6 +640,7 @@ export default function BillingSettings() {
                       ? formatDate(sub?.current_period_ends_at)
                       : formatDate(sub?.locked_at || sub?.current_period_ends_at)}
                   </p>
+
                   <span className="gsea-billing-detail-sub">
                     {sub?.status === 'trialing' && sub?.days_left != null
                       ? `${sub.days_left} día(s) restante(s)`
@@ -573,6 +660,7 @@ export default function BillingSettings() {
 
                 <div className="gsea-billing-detail-item">
                   <span className="gsea-billing-detail-label">Modalidad de cobro</span>
+
                   <p className="gsea-billing-detail-val">
                     {isScheduledCancellation
                       ? 'Renovación manual al vencer'
@@ -582,29 +670,31 @@ export default function BillingSettings() {
                         : 'Renovación automática'
                       : 'Mensual'}
                   </p>
+
                   <span className="gsea-billing-detail-sub">Moneda: MXN</span>
                 </div>
 
                 <div className="gsea-billing-detail-item">
                   <span className="gsea-billing-detail-label">Método de pago</span>
+
                   <p className="gsea-billing-detail-val">
                     {detail?.saved_payment_method
                       ? `${detail.saved_payment_method.brand.toUpperCase()} •••• ${detail.saved_payment_method.last4}`
                       : 'Tarjeta de crédito / débito'}
                   </p>
+
                   <span className="gsea-billing-detail-sub">
                     {detail?.stripe_configured ? 'Stripe activo' : 'Pasarela en configuración'}
                   </span>
                 </div>
               </div>
 
-              {/* Panel desplegable de Administración de Suscripción */}
+              {/* Administración de suscripción */}
               {isManageOpen &&
                 (sub?.status === 'active' || isScheduledCancellation) &&
                 !sub?.is_locked &&
                 sub?.is_accessible && (
                   <div className="gsea-billing-manage-panel">
-                    {/* CASO C: Suscripción con cancelación programada */}
                     {isScheduledCancellation ? (
                       <div className="gsea-billing-manage-content">
                         <div className="gsea-billing-manage-text">
@@ -616,6 +706,7 @@ export default function BillingSettings() {
                             realizarán cobros automáticos posteriores.
                           </p>
                         </div>
+
                         <div className="gsea-billing-manage-actions">
                           {sub?.can_reactivate_automatic && (
                             <button
@@ -635,6 +726,7 @@ export default function BillingSettings() {
                               </span>
                             </button>
                           )}
+
                           <button
                             type="button"
                             className="gsea-billing-manage-btn gsea-billing-manage-btn--secondary"
@@ -646,7 +738,6 @@ export default function BillingSettings() {
                         </div>
                       </div>
                     ) : isAutomaticActive ? (
-                      /* CASO B: Suscripción activa con renovación automática */
                       <div className="gsea-billing-manage-content">
                         <div className="gsea-billing-manage-text">
                           <strong>Suscripción activa con renovación automática</strong>
@@ -657,6 +748,7 @@ export default function BillingSettings() {
                             acceso completo hasta esa fecha sin cargos futuros automáticos.
                           </p>
                         </div>
+
                         <div className="gsea-billing-manage-actions">
                           <button
                             type="button"
@@ -666,6 +758,7 @@ export default function BillingSettings() {
                           >
                             <span>Cambiar a renovación manual</span>
                           </button>
+
                           <button
                             type="button"
                             className="gsea-billing-manage-btn gsea-billing-manage-btn--danger"
@@ -677,7 +770,6 @@ export default function BillingSettings() {
                         </div>
                       </div>
                     ) : (
-                      /* CASO A: Suscripción activa con renovación manual */
                       <div className="gsea-billing-manage-content">
                         <div className="gsea-billing-manage-text">
                           <strong>Modalidad actual: Renovación manual</strong>
@@ -689,6 +781,7 @@ export default function BillingSettings() {
                             automática.
                           </p>
                         </div>
+
                         <div className="gsea-billing-manage-actions">
                           <button
                             type="button"
@@ -697,12 +790,13 @@ export default function BillingSettings() {
                           >
                             <span>Renovar plan</span>
                           </button>
+
                           <button
                             type="button"
                             className="gsea-billing-manage-btn gsea-billing-manage-btn--secondary"
                             onClick={() =>
                               handleOpenConfirmModal(
-                                currentPlan?.id || plans[0]?.id,
+                                getPublicPlanId(currentPlan?.id) || plans[0]?.id,
                                 'automatic'
                               )
                             }
@@ -716,7 +810,7 @@ export default function BillingSettings() {
                 )}
             </div>
 
-            {/* Consumo actual vs Límites del plan */}
+            {/* Consumo actual vs límites del plan */}
             <div className="gsea-billing-usage-section">
               <h3 className="gsea-billing-section-title">
                 <ShieldCheck size={20} color="#00529b" />
@@ -731,10 +825,12 @@ export default function BillingSettings() {
                       <Users size={18} color="#00529b" />
                       <span>Usuarios colaboradores</span>
                     </div>
+
                     <span className="gsea-billing-usage-top-right">
                       {usage.users} / {currentPlan?.limits?.users ?? '∞'}
                     </span>
                   </div>
+
                   <div className="gsea-billing-progress-track">
                     <div
                       className="gsea-billing-progress-fill"
@@ -747,6 +843,7 @@ export default function BillingSettings() {
                       }}
                     />
                   </div>
+
                   <div className="gsea-billing-usage-meta">
                     <span>Cupo en workspace</span>
                     <span>
@@ -764,6 +861,7 @@ export default function BillingSettings() {
                       <FileText size={18} color="#00529b" />
                       <span>Pólizas registradas</span>
                     </div>
+
                     <span className="gsea-billing-usage-top-right">
                       {usage.polizas} /{' '}
                       {currentPlan?.limits?.polizas
@@ -771,6 +869,7 @@ export default function BillingSettings() {
                         : '∞'}
                     </span>
                   </div>
+
                   <div className="gsea-billing-progress-track">
                     <div
                       className="gsea-billing-progress-fill"
@@ -783,6 +882,7 @@ export default function BillingSettings() {
                       }}
                     />
                   </div>
+
                   <div className="gsea-billing-usage-meta">
                     <span>Cartera total</span>
                     <span>
@@ -802,10 +902,12 @@ export default function BillingSettings() {
                       <UserCheck size={18} color="#00529b" />
                       <span>Agentes externos</span>
                     </div>
+
                     <span className="gsea-billing-usage-top-right">
                       {usage.agentes} / {currentPlan?.limits?.agentes ?? '∞'}
                     </span>
                   </div>
+
                   <div className="gsea-billing-progress-track">
                     <div
                       className="gsea-billing-progress-fill"
@@ -818,6 +920,7 @@ export default function BillingSettings() {
                       }}
                     />
                   </div>
+
                   <div className="gsea-billing-usage-meta">
                     <span>Equipo comercial</span>
                     <span>
@@ -830,9 +933,7 @@ export default function BillingSettings() {
               </div>
             </div>
 
-            {/* ========================================================
-                2. CAMBIAR DE PLAN (CATÁLOGO REAL DEL BACKEND)
-               ======================================================== */}
+            {/* 2. CAMBIAR DE PLAN */}
             <div className="gsea-plans-catalog-section">
               <div className="gsea-plans-header">
                 <h3 className="gsea-plans-title">Cambiar de plan</h3>
@@ -843,9 +944,9 @@ export default function BillingSettings() {
 
               <div className="gsea-plans-grid">
                 {plans.map((plan) => {
-                  const isCurrent = currentPlan?.id === plan.id;
+                  const isCurrent = isCurrentPlanSelection(plan.id);
                   const isCurrentAutomaticActive = isCurrent && isAutomaticActive;
-                  const isSelected = selectedPlanId === plan.id;
+                  const isSelected = Number(selectedPlanId) === Number(plan.id);
 
                   return (
                     <div
@@ -861,6 +962,7 @@ export default function BillingSettings() {
                           Plan actual
                         </span>
                       )}
+
                       {!isCurrent && plan.slug === 'crm' && (
                         <span className="gsea-plan-card-tag gsea-plan-card-tag--popular">
                           Más popular
@@ -886,16 +988,19 @@ export default function BillingSettings() {
                         <span className="gsea-plan-card-currency">MXN / mes</span>
                       </div>
 
-                      {/* Chips de límites */}
                       <div className="gsea-plan-card-limits">
                         <span className="gsea-plan-limit-chip">
-                          {plan.limits?.users ? `${plan.limits.users} usuarios` : 'Usuarios ilimitados'}
+                          {plan.limits?.users
+                            ? `${plan.limits.users} usuarios`
+                            : 'Usuarios ilimitados'}
                         </span>
+
                         <span className="gsea-plan-limit-chip">
                           {plan.limits?.polizas
                             ? `${plan.limits.polizas.toLocaleString('es-MX')} pólizas`
                             : 'Pólizas ilimitadas'}
                         </span>
+
                         <span className="gsea-plan-limit-chip">
                           {plan.limits?.agentes
                             ? `${plan.limits.agentes} agentes`
@@ -903,7 +1008,6 @@ export default function BillingSettings() {
                         </span>
                       </div>
 
-                      {/* Lista de beneficios reales */}
                       <ul className="gsea-plan-features-list">
                         {Array.isArray(plan.features) ? (
                           plan.features.map((feat, idx) => (
@@ -926,7 +1030,6 @@ export default function BillingSettings() {
                         )}
                       </ul>
 
-                      {/* Botón de acción por tarjeta */}
                       <div>
                         {isCurrentAutomaticActive ? (
                           <button
@@ -942,9 +1045,11 @@ export default function BillingSettings() {
                             className="gsea-plan-btn gsea-plan-btn--primary"
                             onClick={(e) => {
                               e.stopPropagation();
+
                               handleOpenConfirmModal(
                                 plan.id,
-                                isCurrent && (sub?.status === 'active' || isScheduledCancellation)
+                                isCurrent &&
+                                  (sub?.status === 'active' || isScheduledCancellation)
                                   ? 'manual'
                                   : undefined
                               );
@@ -975,52 +1080,58 @@ export default function BillingSettings() {
                 })}
               </div>
 
-              {/* Barra flotante de confirmación cuando hay un plan seleccionado */}
+              {/* Barra flotante de confirmación */}
               {selectedPlanId &&
                 selectedPlanObj &&
-                (selectedPlanId !== currentPlan?.id || !isAutomaticActive) && (
-                <div className="gsea-plans-continue-bar">
-                  <div className="gsea-plans-continue-info">
-                    <Sparkles size={20} color="#00e676" />
-                    <div>
-                      <strong>Has seleccionado el plan {selectedPlanObj.nombre}</strong>
-                      <span style={{ display: 'block', fontSize: '0.84rem', opacity: 0.85 }}>
-                        {formatCurrency(selectedPlanObj.precio_mensual)} MXN / mes
-                      </span>
-                    </div>
-                  </div>
+                (!isCurrentPlanSelection(selectedPlanId) || !isAutomaticActive) && (
+                  <div className="gsea-plans-continue-bar">
+                    <div className="gsea-plans-continue-info">
+                      <Sparkles size={20} color="#00e676" />
 
-                  <button
-                    type="button"
-                    className="gsea-plans-continue-btn"
-                    onClick={() =>
-                      handleOpenConfirmModal(
-                        selectedPlanId,
-                        selectedPlanId === currentPlan?.id &&
-                          (sub?.status === 'active' || isScheduledCancellation)
-                          ? 'manual'
-                          : undefined
-                      )
-                    }
-                  >
-                    <span>
-                      {selectedPlanId === currentPlan?.id
-                        ? sub?.status === 'active' || isScheduledCancellation
-                          ? 'Continuar con la renovación'
-                          : 'Continuar con la activación'
-                        : 'Continuar con el cambio'}
-                    </span>
-                    <ArrowRight size={17} />
-                  </button>
-                </div>
-              )}
+                      <div>
+                        <strong>Has seleccionado el plan {selectedPlanObj.nombre}</strong>
+                        <span
+                          style={{
+                            display: 'block',
+                            fontSize: '0.84rem',
+                            opacity: 0.85,
+                          }}
+                        >
+                          {formatCurrency(selectedPlanObj.precio_mensual)} MXN / mes
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="gsea-plans-continue-btn"
+                      onClick={() =>
+                        handleOpenConfirmModal(
+                          selectedPlanId,
+                          isCurrentPlanSelection(selectedPlanId) &&
+                            (sub?.status === 'active' || isScheduledCancellation)
+                            ? 'manual'
+                            : undefined
+                        )
+                      }
+                    >
+                      <span>
+                        {isCurrentPlanSelection(selectedPlanId)
+                          ? sub?.status === 'active' || isScheduledCancellation
+                            ? 'Continuar con la renovación'
+                            : 'Continuar con la activación'
+                          : 'Continuar con el cambio'}
+                      </span>
+
+                      <ArrowRight size={17} />
+                    </button>
+                  </div>
+                )}
             </div>
           </div>
         )}
 
-        {/* ========================================================
-            3. MODAL DE CONFIRMACIÓN Y COTIZACIÓN OFICIAL
-           ======================================================== */}
+        {/* 3. MODAL DE CONFIRMACIÓN Y COTIZACIÓN */}
         {isModalOpen && (
           <div className="gsea-modal-backdrop" onClick={handleCloseModal}>
             <div
@@ -1031,6 +1142,7 @@ export default function BillingSettings() {
             >
               <div className="gsea-modal-header">
                 <h3 className="gsea-modal-title">Confirmar cambio de suscripción</h3>
+
                 <button
                   type="button"
                   className="gsea-modal-close-btn"
@@ -1044,30 +1156,34 @@ export default function BillingSettings() {
               <div className="gsea-modal-body">
                 {loadingPreview ? (
                   <div style={{ padding: '2.5rem 0', textAlign: 'center', color: '#64748b' }}>
-                    <RefreshCw size={24} className="gsea-spin" style={{ margin: '0 auto 10px' }} />
+                    <RefreshCw
+                      size={24}
+                      className="gsea-spin"
+                      style={{ margin: '0 auto 10px' }}
+                    />
                     <p style={{ margin: 0, fontWeight: 600 }}>
                       Calculando cotización oficial y prorrateo…
                     </p>
                   </div>
                 ) : previewData?.can_proceed === false ? (
-                  /* ========================================================
-                     REGLA DE BLOQUEO POR LÍMITES SUPERADOS (DOWNGRADE)
-                     ======================================================== */
                   <div className="gsea-modal-warning-box">
                     <h4 className="gsea-modal-warning-title">
                       <AlertTriangle size={18} />
                       No es posible cambiar a este plan actualmente
                     </h4>
+
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#78350f' }}>
                       El uso actual de tu workspace supera los límites contratados para el plan{' '}
                       <strong>{previewData.target_plan?.nombre}</strong>. Para evitar la pérdida o
                       eliminación automática de datos, debes ajustar previamente tu volumen:
                     </p>
+
                     <ul className="gsea-modal-warning-list">
                       {previewData.blockers?.map((b, i) => (
                         <li key={i}>{b}</li>
                       ))}
                     </ul>
+
                     <p
                       style={{
                         margin: '6px 0 0',
@@ -1076,14 +1192,11 @@ export default function BillingSettings() {
                         fontWeight: 600,
                       }}
                     >
-                      Ningún usuario ni póliza se borrará automáticamente. Realiza los ajustes necesarios
-                      en la sección correspondiente y vuelve a intentarlo.
+                      Ningún usuario ni póliza se borrará automáticamente. Realiza los ajustes
+                      necesarios en la sección correspondiente y vuelve a intentarlo.
                     </p>
                   </div>
                 ) : (
-                  /* ========================================================
-                     COTIZACIÓN Y DESGLOSE FINANCIERO OFICIAL
-                     ======================================================== */
                   <>
                     {/* Comparación de planes */}
                     <div className="gsea-modal-plans-banner">
@@ -1093,7 +1206,9 @@ export default function BillingSettings() {
                           {previewData?.current_plan?.nombre || currentPlan?.nombre || 'Actual'}
                         </span>
                       </div>
+
                       <ArrowRight size={22} color="#00529b" />
+
                       <div className="gsea-modal-plan-box" style={{ textAlign: 'right' }}>
                         <span className="gsea-modal-plan-box-label">Plan seleccionado</span>
                         <span className="gsea-modal-plan-box-val" style={{ color: '#00529b' }}>
@@ -1116,14 +1231,19 @@ export default function BillingSettings() {
                                 )}
                           </td>
                         </tr>
+
                         <tr>
                           <td>Impuestos o ajustes (IVA)</td>
                           <td>
                             {previewData?.quote?.tax > 0
-                              ? formatCurrency(previewData.quote.tax, previewData?.quote?.currency)
+                              ? formatCurrency(
+                                  previewData.quote.tax,
+                                  previewData?.quote?.currency
+                                )
                               : '$0.00 MXN (Incluidos)'}
                           </td>
                         </tr>
+
                         <tr className="total-row">
                           <td>Total a pagar hoy</td>
                           <td>
@@ -1135,10 +1255,12 @@ export default function BillingSettings() {
                                 )}
                           </td>
                         </tr>
+
                         <tr>
                           <td>Fecha efectiva del cambio</td>
                           <td>{previewData?.quote?.effective_date || 'Inmediata'}</td>
                         </tr>
+
                         <tr>
                           <td>
                             {isDeferredAutomaticQuote
@@ -1154,6 +1276,7 @@ export default function BillingSettings() {
                             /mes
                           </td>
                         </tr>
+
                         <tr>
                           <td>
                             {isDeferredAutomaticQuote
@@ -1165,7 +1288,6 @@ export default function BillingSettings() {
                       </tbody>
                     </table>
 
-                    {/* Explicación del prorrateo desde el backend */}
                     {previewData?.quote?.summary_note && (
                       <div className="gsea-modal-quote-note">
                         <Info size={15} style={{ display: 'inline', marginRight: 6 }} />
@@ -1173,12 +1295,13 @@ export default function BillingSettings() {
                       </div>
                     )}
 
-                    {/* Selector de modalidad de renovación (Automática vs Manual) */}
+                    {/* Selector de modalidad */}
                     <div className="gsea-modal-gateway-card">
                       <div className="gsea-modal-gateway-header">
                         <Calendar size={18} color="#00529b" />
                         <span>Modalidad de renovación</span>
                       </div>
+
                       <div
                         style={{
                           display: 'grid',
@@ -1213,18 +1336,15 @@ export default function BillingSettings() {
                               marginBottom: '4px',
                             }}
                           >
-                            <strong
-                              style={{
-                                fontSize: '0.88rem',
-                                color: '#0b1b3d',
-                              }}
-                            >
+                            <strong style={{ fontSize: '0.88rem', color: '#0b1b3d' }}>
                               Renovación automática
                             </strong>
+
                             {renewalMode === 'automatic' && (
                               <CheckCircle2 size={16} color="#00529b" />
                             )}
                           </div>
+
                           <span
                             style={{
                               display: 'block',
@@ -1263,18 +1383,15 @@ export default function BillingSettings() {
                               marginBottom: '4px',
                             }}
                           >
-                            <strong
-                              style={{
-                                fontSize: '0.88rem',
-                                color: '#0b1b3d',
-                              }}
-                            >
+                            <strong style={{ fontSize: '0.88rem', color: '#0b1b3d' }}>
                               Renovación manual (1 mes)
                             </strong>
+
                             {renewalMode === 'manual' && (
                               <CheckCircle2 size={16} color="#00529b" />
                             )}
                           </div>
+
                           <span
                             style={{
                               display: 'block',
@@ -1295,17 +1412,21 @@ export default function BillingSettings() {
                         <CreditCard size={18} color="#00529b" />
                         <span>Método de pago</span>
                       </div>
+
                       <div className="gsea-modal-gateway-info">
                         {previewData?.payment_gateway?.is_configured ? (
                           previewData.payment_gateway.saved_payment_method ? (
                             <span>
-                              {previewData.payment_gateway.saved_payment_method.brand.toUpperCase()} ••••{' '}
-                              {previewData.payment_gateway.saved_payment_method.last4} (Vence{' '}
+                              {previewData.payment_gateway.saved_payment_method.brand.toUpperCase()}
+                              {' '}•••• {previewData.payment_gateway.saved_payment_method.last4}
+                              {' '}(Vence{' '}
                               {previewData.payment_gateway.saved_payment_method.exp_month}/
                               {previewData.payment_gateway.saved_payment_method.exp_year})
                             </span>
                           ) : (
-                            <span>Se solicitará tu tarjeta bancaria mediante pasarela Stripe segura.</span>
+                            <span>
+                              Se solicitará tu tarjeta bancaria mediante pasarela Stripe segura.
+                            </span>
                           )
                         ) : (
                           <div style={{ color: '#b45309' }}>
@@ -1378,9 +1499,7 @@ export default function BillingSettings() {
           </div>
         )}
 
-        {/* ========================================================
-            4. MODAL DE CONFIRMACIÓN DE CANCELACIÓN / CAMBIO A MANUAL
-           ======================================================== */}
+        {/* 4. MODAL DE CANCELACIÓN / CAMBIO A MANUAL */}
         {cancelModalAction && (
           <div className="gsea-modal-backdrop" onClick={handleCloseCancelModal}>
             <div
@@ -1395,6 +1514,7 @@ export default function BillingSettings() {
                     ? 'Cambiar a renovación manual'
                     : '¿Seguro que quieres cancelar tu renovación automática?'}
                 </h3>
+
                 <button
                   type="button"
                   className="gsea-modal-close-btn"
@@ -1414,6 +1534,7 @@ export default function BillingSettings() {
                       ? 'Desactivación de cobros automáticos al finalizar tu periodo'
                       : 'Cancelación programada para el final del periodo'}
                   </h4>
+
                   {cancelModalAction === 'switch-to-manual' ? (
                     <>
                       <p
@@ -1429,6 +1550,7 @@ export default function BillingSettings() {
                         <strong>{currentPlan?.nombre || 'contratado'}</strong> hasta el{' '}
                         <strong>{formatDate(sub?.current_period_ends_at)}</strong>.
                       </p>
+
                       <p
                         style={{
                           margin: 0,
@@ -1456,6 +1578,7 @@ export default function BillingSettings() {
                         <strong>{currentPlan?.nombre || 'contratado'}</strong> hasta el{' '}
                         <strong>{formatDate(sub?.current_period_ends_at)}</strong>.
                       </p>
+
                       <p
                         style={{
                           margin: 0,

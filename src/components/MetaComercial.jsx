@@ -56,7 +56,11 @@ export default function MetaComercial() {
       <div className="gsea-target-bar-wrap"><div className="gsea-target-bar-fill" style={{ width: `${progress}%` }} /></div>
       <span className="gsea-target-pct">{pct == null ? 'Sin objetivo establecido' : `${pct.toFixed(1)}% alcanzado`}</span>
       <div className="gsea-target-bottom"><span>Emisiones del mes · {currency}</span><strong>{goal?.polizas_emitidas ?? 'N/D'} pólizas</strong></div>
+      <small>El avance suma la prima total de pólizas con fecha de emisión en este mes y moneda. Si marca 0, aún no hay emisiones registradas en el periodo.</small>
       {data?.disponible === false && <small>Configuración aún no disponible.</small>}
+      {data?.disponible && !canConfigure && !editing && (
+        <small>Solo un administrador con permiso de metas puede configurar el objetivo de este mes.</small>
+      )}
       {canConfigure && !editing && <button type="button" className="gsea-panel-link gsea-link-button" onClick={() => { setTargetInput(goal?.importe_objetivo ?? ''); setEditing(true); }}>{goal ? 'Editar meta' : 'Configurar meta'}</button>}
     </>}
     {editing && canConfigure && <form onSubmit={save}>
